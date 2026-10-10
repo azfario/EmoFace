@@ -1,4 +1,4 @@
-# FaceAttend: Early Studen Emotion Detection
+# FaceAttend: Early Student Emotion Detection
 
 ## Project Overview
 
