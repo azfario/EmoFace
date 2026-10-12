@@ -56,3 +56,6 @@ reports/
 # Local research documentation is preserved but excluded from publication.
 docs/
 scripts/write_results_readout.py
+
+# Preserve former phase dependency snapshots locally, not in the repository.
+requirements-phase*.txt

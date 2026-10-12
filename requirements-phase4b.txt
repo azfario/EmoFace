@@ -1,7 +1,0 @@
-# Phase 4B reuses installed packages; no additive installation or GPU upgrade.
--c requirements-phase4b-constraints.txt
-fastapi==0.135.2
-SQLAlchemy==2.0.54
-alembic==1.20.0
-psycopg==3.3.6
-cryptography==50.0.2

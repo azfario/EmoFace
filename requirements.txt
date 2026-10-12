@@ -1,0 +1,47 @@
+# App and ML pipeline dependencies; versions are fixed in constraints.txt.
+# Install the documented CUDA torch/torchvision wheels first.
+# Install InsightFace separately with --no-deps; see README.md.
+-c constraints.txt
+alembic
+annotated-doc
+annotated-types
+anyio
+click
+coloredlogs
+cryptography
+fastapi
+flatbuffers
+greenlet
+httpx
+humanfriendly
+imageio
+lazy-loader
+mako
+matplotlib
+ml-dtypes
+numpy
+onnx
+onnxruntime-gpu
+opencv-python
+pandas
+pillow
+protobuf
+psycopg[binary]
+psycopg-binary
+pydantic
+pydantic-core
+pyreadline3
+python-multipart
+pyyaml
+requests
+scikit-image
+scikit-learn
+scipy
+sqlalchemy
+starlette
+tifffile
+torch
+torchvision
+tqdm
+typing-inspection
+uvicorn

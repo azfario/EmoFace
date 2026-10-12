@@ -12,10 +12,13 @@ packages = {d.metadata['Name'].lower():d.version for d in meta.distributions()}
 added = {name:version for name,version in packages.items() if name not in baseline['packages']}
 requirements = '# Additions to the preserved Phase 1 .venv. InsightFace installed separately with --no-deps.\n'
 requirements += '\n'.join(f'{name}=={version}' for name,version in sorted(added.items()) if name != 'insightface')+'\n'
-(ROOT/'requirements-phase2.txt').write_text(requirements)
-(ROOT/'requirements-phase2-insightface.txt').write_text('# Install ONLY with --no-deps to avoid installing the conflicting CPU runtime.\ninsightface==1.0.1\n')
-(ROOT/'requirements-phase2-lock.txt').write_text('# Observed complete environment; version inventory, not a standalone installer.\n'+'\n'.join(f'{name}=={version}' for name,version in sorted(packages.items()))+'\n')
-(ROOT/'requirements-phase2-constraints.txt').write_text('# Preserve existing Phase 1 versions when adding packages.\n'+'\n'.join(f'{name}=={version}' for name,version in sorted(baseline['packages'].items()) if name != 'faceattend')+'\n')
+# Historical inventories are reports; never overwrite active install manifests.
+snapshots = REPORTS/'dependency_history'
+snapshots.mkdir(parents=True,exist_ok=True)
+(snapshots/'added_dependencies.txt').write_text(requirements,encoding='utf-8')
+(snapshots/'insightface_install.txt').write_text('# Install ONLY with --no-deps to avoid installing the conflicting CPU runtime.\ninsightface==1.0.1\n',encoding='utf-8')
+(snapshots/'environment_versions.txt').write_text('# Observed environment inventory, not a standalone installer.\n'+'\n'.join(f'{name}=={version}' for name,version in sorted(packages.items()))+'\n',encoding='utf-8')
+(snapshots/'preexisting_constraints.txt').write_text('# Preserved preexisting versions for the historical experiment.\n'+'\n'.join(f'{name}=={version}' for name,version in sorted(baseline['packages'].items()) if name != 'faceattend')+'\n',encoding='utf-8')
 import torch
 import onnxruntime as ort
 smi = subprocess.run(['nvidia-smi','--query-gpu=name,driver_version,memory.total,compute_cap','--format=csv,noheader'],capture_output=True,text=True)

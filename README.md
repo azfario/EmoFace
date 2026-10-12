@@ -52,7 +52,7 @@ Set-Location EmoFace
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu126
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pip install --no-deps -c requirements-phase5-constraints.txt -r requirements-phase2-insightface.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -c constraints.txt insightface==1.0.1
 .\.venv\Scripts\python.exe -m pip install --no-deps --no-build-isolation -e .
 .\.venv\Scripts\python.exe -m ipykernel install --prefix .venv --name faceattend-gpu --display-name 'Python (FaceAttend GPU)'
 .\.venv\Scripts\python.exe scripts\verify_gpu.py
@@ -61,6 +61,8 @@ npm.cmd --prefix frontend run build
 ```
 
 InsightFace is installed separately to avoid pulling in CPU `onnxruntime`; the existing environment uses `onnxruntime-gpu`. Its metadata can therefore produce an expected `pip check` complaint about the CPU package. Check [PyTorch wheels](https://pytorch.org/get-started/previous-versions/) and [ONNX Runtime CUDA compatibility](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) for the documented stack.
+
+[requirements.txt](requirements.txt) installs app/ML dependencies; [requirements-dev.txt](requirements-dev.txt) adds tests and notebook tools. Both use the same tested pins in [constraints.txt](constraints.txt). For an app-only environment, use `-r requirements.txt` in place of `-r requirements-dev.txt`; the CUDA and separate InsightFace steps still apply. `pyproject.toml` retains the Python project/package configuration.
 
 Privately transfer the existing authorized model assets into these paths:
 
