@@ -6,107 +6,162 @@
 
 This project explores how daily school check-ins could support early awareness of students' emotional wellbeing and encourage timely intervention. Facial-expression predictions are intended as supportive indicators, not as a means of diagnosing depression or determining a student's actual emotional state.
 
-## Current Progress
 
-**Last updated: 12 October 2026.** EmoFace currently runs as a local, consenting-adult research prototype. The machine learning, API, database and interface implementation is complete through Phase 5, including the confirmed live-camera and Stop/End session checks. Automated student attendance and school deployment are future project goals.
+## Application and architecture
 
-| Phase | Implemented work | Status |
-| --- | --- | --- |
-| 1 | RAF-DB experiments, MobileNetV3-Small fine-tuning, validation-based model selection and export | Complete |
-| 2 / 2A | CUDA face detection, encrypted verification diagnostics and local webcam capture | Complete |
-| 3 | Local FastAPI model-serving endpoints | Complete |
-| 4 | PostgreSQL integration and anonymous aggregate telemetry | Complete |
-| 4B | Consented adult enrollment, encrypted references, expiry, revocation and deletion | Complete |
-| 4C | Optional candidate matching with unverified results | Complete |
-| 4D | Combined per-face detection, candidate diagnostics and expression prediction | Complete |
-| 5 | React/TypeScript interface and continuous camera analysis | Complete |
+The current application is a local, consenting-adult research prototype. It supports encrypted face enrollment, optional candidate matching and continuous visible-expression prediction. Automated student attendance and school deployment remain future goals.
 
-Phase 6 has not started.
+```text
+Browser camera / image → React + TypeScript → local FastAPI
+                                              ├─ SCRFD face detection → ArcFace candidate diagnostics
+                                              ├─ face crop → MobileNetV3-Small expression prediction
+                                              └─ PostgreSQL consent metadata + encrypted local references
+```
 
-## What Works Now
+- Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
+- One request runs at a time, with at most 20 starts per second and five-minute analysis sessions. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
+- Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
+- Stop camera, End session, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
 
-- Local operator sign-in, service readiness and adult enrollment management.
-- SCRFD face detection and ArcFace verification/candidate diagnostics using the existing laptop CUDA environment.
-- MobileNetV3-Small visible-expression predictions for seven categories: surprise, fear, disgust, happy, sad, angry and neutral.
-- Automatic camera analysis after the user starts the camera and confirms adult consent. Each new frame follows the previous completed analysis, with no five-second pause.
-- A detected face box with **`Emotion: <category>`** above it and an **uncalibrated prediction** note.
-- One analysis request at a time, capped at 20 starts per second and five-minute sessions. Actual update speed depends on capture, encoding and GPU inference.
-- Optional expression analysis on blurry frames when a usable face remains detectable. The interface shows an uncertainty warning and skips identity matching on those frames.
-- Separate choices for expression prediction, possible identity matches and the face outline. Uploaded images use manual analysis.
+The backend uses CUDA PyTorch and ONNX Runtime GPU, FastAPI and SQLAlchemy/Alembic. The frontend uses React, TypeScript and Vite. Runtime APIs, migrations and model interfaces are retained alongside the ML research code.
 
-The camera operates on one voluntarily participating adult at a time. Stop controls, consent withdrawal, navigation, hidden tabs, camera loss and session end stop new captures. The interface records no video, attendance decisions or individual prediction history.
+## Model development and results
 
-## Results and Validation
+Two ImageNet-pretrained MobileNetV3-Small variants were fine-tuned on seven RAF-DB expression categories: surprise, fear, disgust, happy, sad, angry and neutral. Seed-42 stratification produced **10,430 training / 1,841 validation / 3,068 held-out** images. Both variants used the same manifests, seven-logit head, 224×224 RGB preprocessing, ImageNet normalization, AdamW, CUDA AMP and validation-based early stopping. The augmented variant added modest affine and brightness/contrast transformations.
 
-The selected **M1 pretrained + augmentation** model achieved **79.66% held-out accuracy** and **0.7035 macro F1** on the RAF-DB experiment. Model selection was frozen using validation results before held-out evaluation. These historical dataset results do not establish webcam performance. See [experiment results and limitations](docs/RESULTS.md).
+| Experiment | Best epoch | Validation accuracy | Validation macro F1 | Held-out accuracy | Held-out macro F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pretrained baseline | 16 | 76.75% | 0.6795 | 77.35% | 0.6647 |
+| Pretrained + augmentation | 27 | 79.52% | 0.7254 | **79.66%** | **0.7035** |
 
-The latest verified implementation has:
+The augmented checkpoint was selected by validation macro F1, with accuracy and loss as tie-breakers, **before held-out evaluation**. Checkpoint hashes, split fingerprints, resumable optimizer/RNG state and cached evaluation receipts support reproducibility. These are preserved historical results from one run per variant, not newly repeated experiments or webcam accuracy estimates.
 
-- **560 passing Python tests**, including all 528 previous baseline cases and 32 Phase 5 cases.
-- **50 passing frontend tests**.
-- Passing TypeScript checks and production frontend build.
-- Passing actual CUDA/PostgreSQL functional checks, including the expression-only blur exception and live-analysis requests.
+The selected model's lowest held-out per-class F1 values were disgust **0.4498** (160 images) and fear **0.5674** (74 images). Exact file overlap across splits was checked; original per-image annotations/checksums were unavailable, approximate duplicate candidates remain, and identity-level leakage cannot be ruled out. A single seed does not establish statistical significance.
 
-The user confirmed that the live camera works, Stop camera turns off the preview and End session signs out. Temporary demo state was cleaned up and normal PostgreSQL data and privileges were verified unchanged. Camera FPS has not been benchmarked; the frontend's update ceiling is not a measured camera FPS result.
+Inspect the [baseline training notebook](notebooks/02_M0_Pretrained_Baseline_Training.ipynb), [augmented training notebook](notebooks/03_M1_Pretrained_Augmented_Training.ipynb) and [comparison/export notebook](notebooks/04_Model_Comparison_and_Export.ipynb). Published notebooks contain source without captured outputs. To reproduce research, supply an authorized dataset at the paths in [the configuration](configs/common.yaml), inspect its provenance/consent settings for your own data, then run notebooks 01–04 in order. This setup does not grant dataset permissions. [The result validator](scripts/validate_results.py) reconciles retained local receipts without repeating held-out inference.
 
-## Interpretation and Privacy
+## Install and build
 
-Identity results remain **Unknown / unverified**. Candidate similarity has no validated acceptance threshold, and a high-ranked name does not establish identity.
+The verified stack is **Windows, Python 3.12.14, PyTorch 2.13.0+cu126, ONNX Runtime GPU 1.20.2, Node 22.13.0/npm 10.9.2**, with an NVIDIA RTX 3060 Laptop GPU. Other hardware/installations must be verified independently; model inference requires CUDA.
 
-The on-screen `Emotion:` label is a visible-expression model prediction. Scores are uncalibrated and do not determine a person's actual emotional state, wellbeing or diagnosis. FaceAttend is not a clinical assessment or liveness system.
+Clone using your own GitHub account and recreate the environment:
 
-Encrypted enrollment references have explicit consent and a bounded retention period. Operator sessions last 15 minutes. The application uses local processing, same-origin authentication and CSRF protection; anonymous telemetry is off by default.
+```powershell
+git clone https://github.com/azfario/EmoFace.git
+Set-Location EmoFace
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu126
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -c requirements-phase5-constraints.txt -r requirements-phase2-insightface.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps --no-build-isolation -e .
+.\.venv\Scripts\python.exe -m ipykernel install --prefix .venv --name faceattend-gpu --display-name 'Python (FaceAttend GPU)'
+.\.venv\Scripts\python.exe scripts\verify_gpu.py
+npm.cmd --prefix frontend ci --ignore-scripts --no-fund
+npm.cmd --prefix frontend run build
+```
 
-Participant photos, biometric templates, keys, credentials, datasets, model weights, database storage, local handoffs and reports are kept out of this repository. Notebook publication copies contain source without captured outputs; the original executed notebooks and experimental artifacts remain preserved locally.
+InsightFace is installed separately to avoid pulling in CPU `onnxruntime`; the existing environment uses `onnxruntime-gpu`. Its metadata can therefore produce an expected `pip check` complaint about the CPU package. Check [PyTorch wheels](https://pytorch.org/get-started/previous-versions/) and [ONNX Runtime CUDA compatibility](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) for the documented stack.
 
-## Technology and Local Setup
+Privately transfer the existing authorized model assets into these paths:
 
-The verified development environment is Windows, Python 3.12.14, PyTorch 2.13.0+cu126, ONNX Runtime GPU 1.20.2 and an NVIDIA RTX 3060 Laptop GPU. The interface uses React, TypeScript and Vite with Node 22.13.0/npm 10.9.2. The backend uses FastAPI and PostgreSQL.
+```text
+models/faceattend_best.pt
+models/external/insightface/buffalo_l/det_10g.onnx
+models/external/insightface/buffalo_l/w600k_r50.onnx
+```
 
-Inference requires the configured CUDA environment and authorized local model assets. A source checkout does not include the trained checkpoint, third-party face weights, dataset or operator credentials.
+Weights, datasets and database storage are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license). Cloning transfers source, not those assets, participant data or permissions.
 
-To clone and continue development on another Windows/NVIDIA PC, start with the [new-PC setup guide](docs/SETUP_NEW_PC.md). It covers recreating `.venv`, installing the pinned dependencies, source-checkout tests, local model assets and fresh database/operator setup. Copy your retained model checkpoint separately; cloning does not transfer it, your dataset or your existing database.
+## Configure PostgreSQL and the operator
 
-After installing dependencies, the development check command is:
+Use an isolated local PostgreSQL cluster, bound to `127.0.0.1`; the verified laptop uses port **55432**. Install PostgreSQL separately if needed. For a new empty cluster, initialize with a password prompt and SCRAM authentication; never initialize an existing database directory:
+
+```powershell
+$faceattendPgBin = 'C:\Program Files\PostgreSQL\18\bin' # Adjust to your installation.
+$faceattendPgData = Join-Path $env:LOCALAPPDATA 'FaceAttend\postgresql\data'
+& "$faceattendPgBin\initdb.exe" -D $faceattendPgData -U faceattend_admin -W -A scram-sha-256 --encoding=UTF8
+```
+
+Before starting, set this new cluster's `postgresql.conf` to `listen_addresses='127.0.0.1'`, `port=55432`, `password_encryption='scram-sha-256'`, `log_statement='none'`, `log_min_error_statement='panic'` and `log_parameter_max_length_on_error=0`. Restrict `pg_hba.conf` to local SCRAM connections (`host all all 127.0.0.1/32 scram-sha-256`) and protect storage with your NTFS ACL. Use an unused port and do not alter an unrelated/shared server.
+
+```powershell
+& "$faceattendPgBin\pg_ctl.exe" -D $faceattendPgData -l (Join-Path (Split-Path $faceattendPgData) 'postgresql.log') -w start
+& "$faceattendPgBin\psql.exe" -h 127.0.0.1 -p 55432 -U faceattend_admin -d postgres -W
+```
+
+Inside this identified project cluster, create separate owner/runtime roles. Enter passwords with `\password`:
+
+```sql
+CREATE ROLE faceattend_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+CREATE ROLE faceattend_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+\password faceattend_migrator
+\password faceattend_runtime
+CREATE DATABASE faceattend_research OWNER faceattend_migrator;
+REVOKE ALL ON DATABASE faceattend_research FROM PUBLIC;
+GRANT CONNECT ON DATABASE faceattend_research TO faceattend_migrator,faceattend_runtime;
+\connect faceattend_research
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO faceattend_runtime;
+\quit
+```
+
+In PowerShell, enter the migration URL through a hidden prompt. Use `postgresql+psycopg://faceattend_migrator:<URL-encoded password>@127.0.0.1:55432/faceattend_research` with your own password; do not place credentials in commands or Git:
+
+```powershell
+$env:FACEATTEND_MIGRATION_DATABASE_URL = [System.Net.NetworkCredential]::new('', (Read-Host 'Migration-owner URL' -AsSecureString)).Password
+.\.venv\Scripts\python.exe -m alembic -c alembic.ini upgrade head
+.\.venv\Scripts\python.exe scripts\phase4b_migrate.py
+Remove-Item Env:\FACEATTEND_MIGRATION_DATABASE_URL
+```
+
+The enrollment helper grants access only to its `demo` metadata table. Connect to `faceattend_research` as `faceattend_migrator` using interactive `psql -W` and grant aggregate access separately:
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON public.research_daily_operation_stats TO faceattend_runtime;
+```
+
+The runtime role must have no aggregate DELETE/TRUNCATE, schema CREATE or migration-table privileges. Anonymous aggregate telemetry remains disabled by default. Database integration tests require separately configured disposable test roles/database; ordinary source tests do not use your retained database.
+
+Create fresh operator credentials and an encryption key outside the checkout and OneDrive:
+
+```powershell
+$faceattendPrivate = Join-Path $env:LOCALAPPDATA 'FaceAttend\phase2\private\phase4b'
+$env:FACEATTEND_ENROLLMENT_GALLERY_DIR = Join-Path $faceattendPrivate 'gallery'
+$env:FACEATTEND_ENROLLMENT_KEY_FILE = Join-Path $faceattendPrivate 'secrets\gallery.key'
+$env:FACEATTEND_OPERATOR_AUTH_FILE = Join-Path $faceattendPrivate 'secrets\operator.secret'
+.\.venv\Scripts\python.exe scripts\phase4b_admin.py setup --gallery-dir $env:FACEATTEND_ENROLLMENT_GALLERY_DIR --key-file $env:FACEATTEND_ENROLLMENT_KEY_FILE --auth-file $env:FACEATTEND_OPERATOR_AUTH_FILE
+```
+
+The helper prompts for your chosen password, protects the files and refuses to overwrite existing secrets. [.env.example](.env.example) documents settings; the app does not automatically load `.env`.
+
+## Run and test
+
+In the same shell, enter your runtime URL using `faceattend_runtime`, then start the single-worker loopback app:
+
+```powershell
+$env:FACEATTEND_ENROLLMENT_DATABASE_URL = [System.Net.NetworkCredential]::new('', (Read-Host 'Runtime URL' -AsSecureString)).Password
+$env:FACEATTEND_ENROLLMENT_ENABLED = 'true'
+$env:FACEATTEND_FRONTEND_ENABLED = 'true'
+$env:FACEATTEND_FACE_ANALYSIS_ENABLED = 'true'
+$env:FACEATTEND_CANDIDATES_ENABLED = 'true'
+$env:FACEATTEND_DB_TELEMETRY_ENABLED = 'false'
+.\.venv\Scripts\python.exe scripts\phase3_serve.py
+```
+
+Open `http://127.0.0.1:8000/app/`, sign in with your chosen operator password, select a camera and confirm adult consent. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
+
+Run source-checkout checks:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_checks.py --frontend
 ```
 
-This command works without the original laptop's handoffs or preservation reports. Private-image, saved-model and database integration checks require their own local setup; they are not enabled by this command.
+The source-only publication checks passed **501 Python tests**, with **59 optional tests skipped**, and **50 frontend tests**, plus TypeScript and the production build. The original environment also completed **560 Python tests** with explicitly configured GPU/database/private-input integrations. Fresh-PC installation has not been independently tested. The check launcher disables private-input/database/saved-model integration flags, creates ignored local output directories and needs no historical handoffs.
 
-The prepared source-only export was checked using the existing environment: **501 Python tests passed, 59 optional tests skipped, and 50 frontend tests passed**, with TypeScript checks and the frontend build passing. Installation and hardware setup on another physical PC still need to be verified there.
+## Privacy and limitations
 
-Additional setup references:
+Identity matching remains **Unknown / unverified**: candidate similarity has no validated acceptance threshold. Expression scores are uncalibrated visible-category predictions and do not establish actual feelings, wellbeing or diagnosis. This prototype is not a clinical, liveness or automated attendance decision system.
 
-- [GPU setup](docs/GPU_SETUP.md)
-- [Face-model and verification setup](docs/phase2/README.md)
-- [FastAPI guide](docs/phase3/API_GUIDE.md)
-- [PostgreSQL setup on Windows](docs/phase4/POSTGRES_SETUP_WINDOWS.md)
-- [Enrollment lifecycle](docs/phase4b/ENROLLMENT_GUIDE.md)
-- [Local interface and camera guide](docs/phase5/UI_GUIDE.md)
+Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. Operator sessions expire after 15 minutes; same-origin cookies and CSRF protection protect local operations. Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
 
-Build the frontend from the repository root:
-
-```powershell
-npm.cmd --prefix frontend ci --ignore-scripts --no-fund
-npm.cmd --prefix frontend run build
-```
-
-The enabled FastAPI application serves the built interface at `/app/` on its loopback origin. Follow the interface guide to configure protected local credentials and start the service.
-
-## Repository Layout
-
-```text
-configs/             Experiment and face-model configuration
-notebooks/           Training and verification notebook source
-src/                 ML pipelines, FastAPI services and database modules
-frontend/            React/TypeScript local interface
-migrations*/         PostgreSQL migrations
-scripts/             Setup, execution, validation and lifecycle helpers
-tests/               Backend and frontend integration support
-docs/                New-PC setup, feature guides and experiment context
-requirements-dev.txt Fresh source-checkout Python dependency entry point
-```
-
-Phase 5 acceptance and temporary-demo cleanup are complete. Subsequent phases require separate approval; this progress update does not claim the complete attendance system is finished.
+Participant images, templates, credentials, keys, datasets, weights, database files, local documentation, handoffs and reports are excluded from publication. Original research artifacts remain preserved locally. This repository cleanup changes presentation and file tracking, not runtime behavior or the implemented project scope.

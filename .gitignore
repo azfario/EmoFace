@@ -52,3 +52,7 @@ reports/
 *Handoff*.md
 *HANDOFF*.md
 *handoff*.md
+
+# Local research documentation is preserved but excluded from publication.
+docs/
+scripts/write_results_readout.py
