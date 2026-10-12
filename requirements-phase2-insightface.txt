@@ -1,0 +1,2 @@
+# Install ONLY with --no-deps to avoid installing the conflicting CPU runtime.
+insightface==1.0.1

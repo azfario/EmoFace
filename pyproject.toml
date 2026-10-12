@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faceattend"
+version = "0.1.0"
+description = "GPU-only RAF-DB visible expression experiments"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "Pillow", "scikit-learn", "matplotlib", "PyYAML", "tqdm"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,5 @@
+# Existing Windows environment only; no installation or model upgrades.
+-c requirements-phase4d-constraints.txt
+torch==2.13.0+cu126
+fastapi==0.135.2
+httpx==0.28.1

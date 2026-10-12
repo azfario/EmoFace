@@ -1,0 +1,7 @@
+experiment: m1_pretrained_augmented
+augmentation: conservative
+horizontal_flip: false
+rotation_degrees: 10
+translation: 0.03
+brightness: 0.1
+contrast: 0.1

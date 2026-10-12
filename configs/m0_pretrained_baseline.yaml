@@ -1,0 +1,3 @@
+experiment: m0_pretrained_baseline
+augmentation: baseline
+horizontal_flip: false

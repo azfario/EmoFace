@@ -1,0 +1,7 @@
+# Reuse installed Phase 1–4B environment; no installation or model changes.
+-c requirements-phase4c-constraints.txt
+fastapi==0.135.2
+SQLAlchemy==2.0.54
+psycopg==3.3.6
+cryptography==50.0.2
+httpx==0.28.1

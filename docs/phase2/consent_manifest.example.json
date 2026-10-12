@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "authorized_noncommercial_research": true,
+  "participants": [
+    {
+      "user_id": "volunteer_001",
+      "split": "development",
+      "adult_consent": false,
+      "identity_consent": false,
+      "enrollment": [
+        {"path": "captures/volunteer_001/enroll_01.jpg", "session": "session_A"},
+        {"path": "captures/volunteer_001/enroll_02.jpg", "session": "session_A"},
+        {"path": "captures/volunteer_001/enroll_03.jpg", "session": "session_A"}
+      ],
+      "probes": [{"path": "captures/volunteer_001/probe_01.jpg", "session": "session_B"}]
+    },
+    {
+      "user_id": "volunteer_002",
+      "split": "test",
+      "adult_consent": false,
+      "identity_consent": false,
+      "enrollment": [
+        {"path": "captures/volunteer_002/enroll_01.jpg", "session": "session_A"},
+        {"path": "captures/volunteer_002/enroll_02.jpg", "session": "session_A"},
+        {"path": "captures/volunteer_002/enroll_03.jpg", "session": "session_A"}
+      ],
+      "probes": [{"path": "captures/volunteer_002/probe_01.jpg", "session": "session_B"}]
+    }
+  ]
+}

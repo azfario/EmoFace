@@ -1,0 +1,18 @@
+seed: 42
+epochs: 30
+batch_size: 32
+lr: 0.0001
+weight_decay: 0.0001
+patience: 8
+num_workers: 0
+amp: true
+amp_initial_scale: 1024.0
+input_size: [224, 224]
+weights: IMAGENET1K_V1
+raw_root: data/raw/rafdb
+manifest_root: data/processed
+authorized_data: true
+label_mapping_verified: true
+authorization_basis: "User supplied local files and instructed proceeding after the source/terms and alignment review; local non-commercial Phase 1 experiment only"
+label_mapping_basis: "Original RAF canonical order corroborated by primary research; all fourteen local class counts and filename sequences match published benchmark; per-image original annotations/checksums remain unverified"
+partition_provenance: "Kaggle train/test CSVs and filename prefixes; original annotation file absent"

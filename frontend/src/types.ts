@@ -1,0 +1,10 @@
+export type Page='overview'|'enrollments'|'camera'|'privacy';
+export type Enrollment={identity_id:string;display_name:string;status:string;expires_at:string;consent_recorded_at:string;verified:false;threshold:null};
+export type Candidate={identity_id:string;display_name:string;label:string;cosine_similarity:number;verified:false};
+export type Identity={identity_status:string;candidate_count:number;possible_candidates:Candidate[];verified:false;threshold:null;reason:string};
+export type Expression={label:string;softmax_score:number;score_calibrated:false;not_a_mood_or_diagnosis:true;domain_accuracy_validated:false};
+export type FaceBox={x:number;y:number;width:number;height:number;image_width:number;image_height:number};
+export type Analysis={face_count:number;face_detected:boolean;faces:{face_index:number;identity_diagnostic:Identity;visible_expression_prediction?:Expression;face_box?:FaceBox;input_quality?:{status:string;warning:string}}[];verified:false;threshold:null};
+export type UIStatus={fixture_mode:boolean;registration_database:string;operator_auth_ready:boolean;candidates_enabled:boolean;analysis_enabled:boolean;telemetry_enabled:boolean;anonymous_totals:{day_utc:string;requests:number}|null};
+export type ModelInfo={gpu_device:string|null;model_readiness:{face:string;expression:string}};
+export type AnalysisOptions={expression:boolean;candidates:boolean;outline:boolean;liveCamera?:boolean};

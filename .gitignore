@@ -34,3 +34,21 @@ data/phase2_local/
 *.heic
 .env.*
 .venv-phase2/
+
+# Phase 4: local database storage, backups and authentication artifacts.
+*.sql
+*.dump
+*.backup
+*.pgpass
+.pgpass
+pgpass.conf
+postgresql-data/
+pgdata/
+credentials*.json
+!.env.example
+
+# Keep local progress history and generated receipts off GitHub.
+reports/
+*Handoff*.md
+*HANDOFF*.md
+*handoff*.md

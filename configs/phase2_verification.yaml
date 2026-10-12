@@ -1,0 +1,24 @@
+# Research prototype. This file contains no biometric threshold or secret.
+model_root: models/external/insightface
+pack: buffalo_l
+detector_file: det_10g.onnx
+recognition_file: w600k_r50.onnx
+store_dir: data/private/templates
+key_env: FACEATTEND_TEMPLATE_KEY
+retention_days: 30
+threshold_file: reports/phase2/calibrated_threshold.json
+device_id: 0
+detection_size: 640
+detection_confidence: 0.6
+min_image_side: 160
+min_face_side: 80
+min_blur_variance: 60.0
+min_brightness: 35.0
+max_brightness: 220.0
+min_enrollment_images: 3
+max_enrollment_images: 5
+consistency_cosine: 0.6
+target_fmr: 0.01
+confidence: 0.95
+min_development_subjects: 10
+min_genuine_pairs: 30

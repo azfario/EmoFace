@@ -1,0 +1,22 @@
+# Fresh Windows source-checkout dependencies. Install CUDA torch/torchvision first.
+# Install InsightFace separately with --no-deps, as documented in SETUP_NEW_PC.md.
+-c requirements-phase5-constraints.txt
+-r requirements-phase2.txt
+-r requirements-phase3.txt
+-r requirements-phase4.txt
+numpy
+pandas
+Pillow
+scipy
+scikit-learn
+matplotlib
+PyYAML
+tqdm
+requests
+pytest
+httpx
+ipykernel
+jupyter
+nbformat
+nbclient
+setuptools

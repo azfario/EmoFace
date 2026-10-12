@@ -1,0 +1,8 @@
+# Additive database dependencies; existing GPU/API distributions are constrained.
+-c requirements-phase4-constraints.txt
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.3.6
+psycopg-binary==3.3.6
+greenlet==3.5.6
+Mako==1.4.3
