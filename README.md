@@ -1,14 +1,14 @@
-# FaceAttend: Early Studen Emotion Detection
+# EmoFace: Early Student Emotion Detection
 
 ## Project Overview
 
-**FaceAttend** is an end-to-end machine learning project designed to automate student attendance through facial recognition while classifying facial expressions using a custom fine-tuned MobileNetV3 deep learning model.
+**EmoFace** is an end-to-end machine learning project designed to automate student attendance through facial recognition while classifying facial expressions using a custom fine-tuned MobileNetV3 deep learning model.
 
 This project explores how daily school check-ins could support early awareness of students' emotional wellbeing and encourage timely intervention. Facial-expression predictions are intended as supportive indicators, not as a means of diagnosing depression or determining a student's actual emotional state.
 
 ## Current Progress
 
-**Last updated: 12 October 2026.** FaceAttend currently runs as a local, consenting-adult research prototype. The machine learning, API, database and interface implementation is complete through Phase 5, including the confirmed live-camera and Stop/End session checks. Automated student attendance and school deployment are future project goals.
+**Last updated: 12 October 2026.** EmoFace currently runs as a local, consenting-adult research prototype. The machine learning, API, database and interface implementation is complete through Phase 5, including the confirmed live-camera and Stop/End session checks. Automated student attendance and school deployment are future project goals.
 
 | Phase | Implemented work | Status |
 | --- | --- | --- |
