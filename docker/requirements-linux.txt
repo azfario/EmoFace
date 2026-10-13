@@ -1,0 +1,26 @@
+# Separate Linux runtime; never install this into the native Windows .venv.
+# CUDA torch/torchvision are installed first from their official cu126 index.
+numpy==2.5.2
+pandas==3.0.6
+Pillow==12.3.0
+scipy==1.18.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+PyYAML==6.0.3
+tqdm==4.70.1
+requests==2.34.2
+onnx==1.23.2
+onnxruntime-gpu==1.20.2
+opencv-python-headless==5.0.0.93
+scikit-image==0.26.0
+cryptography==50.0.2
+fastapi==0.135.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+starlette==1.7.0
+pydantic==2.14.0
+httpx==0.28.1
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.3.6
+setuptools==78.1.0
