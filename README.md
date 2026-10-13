@@ -42,24 +42,80 @@ To stop while keeping your data and secrets:
 
 For the next run, start Docker Desktop and run `.\start.ps1` again. If an older app stack is already running, stop it before launching an updated build. The runtime model files still live under `models/`; existing models are preserved. Custom paths/project names must be reused when stopping or restarting; see [Advanced development](#advanced-development).
 
-## Application and architecture
+## Technologies Used
+
+| Layer | Technology |
+|---|---|
+| Backend framework | FastAPI with Uvicorn (ASGI) |
+| Languages | Python 3.12, TypeScript (strict mode) |
+| UI | React 19, Vite, CSS |
+| Expression model | Fine-tuned MobileNetV3-Small via PyTorch and Torchvision |
+| Face detection | SCRFD via InsightFace and ONNX Runtime GPU |
+| Face recognition | ArcFace embeddings for optional, unverified candidate matching |
+| Image processing | OpenCV, Pillow, NumPy |
+| Database | PostgreSQL 18, SQLAlchemy ORM, Psycopg, Alembic migrations |
+| File storage | Local Fernet-encrypted references and Docker volumes |
+| Model storage | Git LFS in the private GitHub repository |
+| GPU runtime | NVIDIA CUDA, cuDNN, PyTorch, ONNX Runtime GPU |
+| Access | Login-free local workspace; temporary cookies, CSRF and request limits |
+| Deployment | Docker Compose, Nginx, Windows WSL2 |
+| Startup launcher | PowerShell |
+| Testing | Pytest, Vitest, React Testing Library, jsdom |
+| Research tools | Jupyter, Pandas, scikit-learn, Matplotlib |
+
+## System Architecture
 
 The current application is a local, consenting-adult research prototype. It supports encrypted face enrollment, optional candidate matching and continuous visible-expression prediction. Automated student attendance and school deployment remain future goals.
 
 ```text
-Browser camera / image → React + TypeScript → local FastAPI
-                                              ├─ SCRFD face detection → ArcFace candidate diagnostics
-                                              ├─ face crop → MobileNetV3-Small expression prediction
-                                              └─ PostgreSQL consent metadata + encrypted local references
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Browser → React + TypeScript UI                                          │
+│   frontend/src/                                                          │
+│   ├── App.tsx       Camera, uploads and enrollment interface             │
+│   ├── api.ts        Frame uploads and JSON API requests                  │
+│   └── FaceOverlay.tsx   Face box + Emotion caption from returned results │
+└──────────────────────────────────────────────────────────────────────────┘
+     │ Same-origin HTTP requests / JSON responses
+     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Nginx frontend container → http://127.0.0.1:18080/app/                   │
+│   ├── /app/         Serves the production React build                    │
+│   └── /api/         Proxies requests to local FastAPI on port 8000       │
+└──────────────────────────────────────────────────────────────────────────┘
+     │ Image upload → POST /api/v1/demo/analyze-face
+     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FastAPI + Uvicorn (single GPU worker)                                    │
+│   ├── Consent, local-origin, CSRF and request-limit checks               │
+│   ├── SCRFD detection → one face, coordinates and aligned crop           │
+│   ├── Face crop → MobileNetV3-Small → expression prediction              │
+│   ├── Optional ArcFace → possible candidates (unverified)                │
+│   └── Enrollment routes → SQLAlchemy + encrypted-reference service       │
+└──────────────────────────────────────────────────────────────────────────┘
+     │ Enrollment/candidate operations; no prediction history
+     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Persistent local storage (separate Docker volumes)                       │
+│   ├── PostgreSQL 18    Chosen-name, consent and expiry metadata          │
+│   └── Encrypted files  Fernet-protected face references                  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+FastAPI connects the browser interface to the GPU models. Analysis results return as JSON to the UI; the browser draws the face box and `Emotion: <category>` caption. Uploaded frames and expression predictions are processed transiently, rather than stored in PostgreSQL.
+
+Key data flows:
+
+- **Camera analysis** — consenting-adult frame → FastAPI → face detection and expression prediction → JSON → camera overlay. Candidate matching runs only when opted in.
+- **Enrollment** — 3–5 consented reference photos → quality checks and ArcFace → encrypted reference + minimal PostgreSQL metadata. Source photos are not retained by the app.
+- **Model startup** — private GitHub Git LFS assets → hash verification → local `models/` copies → read-only container mount → CUDA inference.
+
+Runtime behavior:
 
 - Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
 - Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
 - Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
 - The app opens without a login. All local users can manage saved enrollments; temporary browser sessions still enforce CSRF protection and request limits.
 - Stop camera, Clear workspace, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
-
-The backend uses CUDA PyTorch and ONNX Runtime GPU, FastAPI and SQLAlchemy/Alembic. The frontend uses React, TypeScript and Vite. Runtime APIs, migrations and model interfaces are retained alongside the ML research code.
 
 ## Model development and results
 
