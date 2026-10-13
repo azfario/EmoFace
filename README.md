@@ -19,7 +19,7 @@ Browser camera / image → React + TypeScript → local FastAPI
 ```
 
 - Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
-- One request runs at a time, with at most 20 starts per second and five-minute analysis sessions. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
+- Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
 - Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
 - Stop camera, End session, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
 
@@ -68,8 +68,8 @@ Privately transfer the existing authorized model assets into these paths:
 
 ```text
 models/faceattend_best.pt
-models/external/insightface/buffalo_l/det_10g.onnx
-models/external/insightface/buffalo_l/w600k_r50.onnx
+models/external/insightface/models/buffalo_l/det_10g.onnx
+models/external/insightface/models/buffalo_l/w600k_r50.onnx
 ```
 
 Weights, datasets and database storage are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license). Cloning transfers source, not those assets, participant data or permissions.
@@ -159,6 +159,81 @@ Run source-checkout checks:
 ```
 
 The source-only publication checks passed **501 Python tests**, with **59 optional tests skipped**, and **50 frontend tests**, plus TypeScript and the production build. The original environment also completed **560 Python tests** with explicitly configured GPU/database/private-input integrations. Fresh-PC installation has not been independently tested. The check launcher disables private-input/database/saved-model integration flags, creates ignored local output directories and needs no historical handoffs.
+
+## Local GPU Docker Compose
+
+GPU Docker deployment is implemented and tested on the original laptop, including an isolated PostgreSQL database, protected operator/encryption secrets, CUDA-only model inference and a localhost browser interface. The Docker acceptance suite passed **14 tests**. The owner also confirmed the Camo → OBS Virtual Camera feed, adult-consent gating, successive face-box/Emotion updates, Stop camera and End session through the Docker-served page.
+
+The physical-camera run included three HTTP refusals and two overlapping HTTP handlers; their exact causes were not established. Existing client serialization and backend model-gate tests passed, but this does not prove perfect request serialization across the observed run. No camera FPS or prediction-accuracy claim is made. A fresh installation on a second PC remains unverified.
+
+Docker is an alternative runtime; it does not modify the native Windows environment or its database. Use Docker Desktop with **Linux containers, WSL2 and NVIDIA GPU support**. The tested laptop has a 6 GB RTX 3060 GPU. Plan for **40 GB of free disk headroom for a first CUDA image build**, in addition to existing Docker storage, and monitor space during export. The successful laptop retry began with 41.2 GiB free and already cached CUDA layers; this is not a measured fresh-install minimum. Build downloads require internet; the running application blocks new outbound connections and DNS. See [Docker's GPU prerequisites](https://docs.docker.com/desktop/features/gpu/) and [Compose GPU reservations](https://docs.docker.com/compose/how-tos/gpu-support/).
+
+```text
+Browser → 127.0.0.1:18080 → Nginx frontend
+                               │ shared Compose network namespace
+                               ├─ 127.0.0.1:8000 FastAPI, one GPU worker
+                               └─ 127.0.0.1:5432 isolated PostgreSQL 18
+                                  │
+                           metadata volume + encrypted-reference volume
+Operator secret files → read-only mounts → private temporary key copies
+Authorized model files → read-only mount; absent from images
+```
+
+Only Nginx publishes a host port, bound to IPv4 loopback. The shared namespace preserves the backend's existing loopback, Host/Origin and CSRF checks without trusting forwarded client headers. A one-shot network guard has `NET_ADMIN` solely inside this namespace, drops new outbound IPv4/IPv6 traffic and embedded DNS, and allows loopback and established replies. The API checks the guard's namespace marker before startup. This is local application isolation, not protection from an administrator controlling Docker or the host.
+
+The [Compose manifest](compose.yaml) creates separate database, encrypted-reference and network-state volumes. It never mounts the native PostgreSQL cluster at port 55432. Only the API reserves a GPU; frontend/API run as non-root, and the database initialization and namespace guard use narrowly scoped elevated container privileges. Images use digest-pinned bases, a [separate complete Linux package lock](docker/requirements-linux-lock.txt), read-only runtime filesystems and explicit source-only build inputs. The Linux loader path includes the installed CUDA/cuDNN libraries; Windows constraints remain unchanged. Face-model CPU fallback remains disabled, and health requires actual model and registration-database readiness.
+
+From the checkout, with the native helper dependencies installed as above, create **new** protected Compose secrets. This prompts for your chosen operator password and refuses an existing directory:
+
+```powershell
+$env:EMOFACE_MODELS_DIR = Join-Path (Get-Location) 'models'
+$env:EMOFACE_SECRETS_DIR = Join-Path $env:LOCALAPPDATA 'FaceAttend\phase6\private\operator_secrets'
+.\.venv\Scripts\python.exe docker\setup_secrets.py --directory $env:EMOFACE_SECRETS_DIR
+docker version
+docker compose version
+docker compose config --quiet
+docker compose build api frontend
+docker compose up -d frontend network_guard db
+docker compose run --rm --no-deps api python docker/gpu_check.py
+docker compose up -d --wait --wait-timeout 180
+```
+
+The GPU check runs the mounted saved models on synthetic tensors and requires exclusive CUDA computation. Stop if it fails; do not substitute a CPU service. One-shot migrations use the owner credential; the API receives only the restricted runtime database password, operator record and encryption key. Keep all five generated secret files outside the checkout and OneDrive, under their protected ACL. No default production password is supplied. `--qa` creates a separately scoped fictional test fixture only; it is not an operator setup shortcut.
+
+Open `http://127.0.0.1:18080/app/` and sign in with the password you chose. Start the camera yourself and confirm adult consent; the existing automatic expression/outline workflow then operates as before. The container tests do not request camera permission. Enrollment requires 3–5 distinct acceptable images and encrypted-reference consent. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
+
+To stop, preserve data and restart later:
+
+```powershell
+docker compose down
+docker compose up -d --wait --wait-timeout 180
+```
+
+Use a whole-stack `down`/`up` when changing or rebuilding the frontend namespace owner. Do not restart or recreate the frontend alone while backend/database services are retained in its old namespace. After a source update, run `docker compose down`, `docker compose build api frontend`, then `docker compose up -d --wait --wait-timeout 180`. An API-only restart retains data and invalidates in-memory operator sessions.
+
+**Backup and retention:** stop the stack before making a consistent, access-controlled backup of its named database and encrypted-reference volumes. Back up the protected host secret directory independently; key loss makes templates unreadable. The API's key copies are temporary memory files, while non-secret credential fingerprints prevent accidental rotation. Restoring requires the matching database, encrypted references and secrets as one coordinated set, the same compatible model assets, and a fresh GPU/readiness check. Backups can retain deleted identities; apply the same consent and maximum 30-day retention policy to them. The app provides revoke/delete and expiry cleanup, but does not promise secure erasure from SSDs or backups. Secret rotation and backup restoration are manual operations, not automatic features.
+
+`docker compose down --volumes` would erase Compose-owned data; it is deliberately not part of setup, tests or normal shutdown. Do not use pruning as a troubleshooting shortcut. PostgreSQL logs omit statements and bind values, and HTTP access logging is disabled. Models, photographs, keys, credentials, handoffs and reports do not enter the build context or final images.
+
+For troubleshooting, use `docker compose ps -a` and coarse service health. Verify the phone/OBS source separately if browser preview fails. If CUDA fails, check WSL2, Docker's GPU device access, driver and the pinned CUDA 12/cuDNN 9 environment using the synthetic GPU checker. If database initialization/migrations fail, verify the scoped secret mounts and volume ownership; preserve volumes and never point Compose at the native cluster. If port 18080 is occupied, stop the unrelated conflict only with its owner's approval; changing the port requires updating both Compose and the proxy's exact Host/Origin allowlist.
+
+Ordinary source tests include static container-contract checks. Live Compose tests in [tests/phase6](tests/phase6/) are explicitly opt-in and restricted to the disposable `emoface_phase6qa` project. To run those checks, stop the normal stack first so port 18080 is free, then create a new QA secret directory and isolated project:
+
+```powershell
+$env:COMPOSE_PROJECT_NAME = 'emoface_phase6qa'
+# First QA setup only; later runs must reuse the matching existing secret directory.
+$env:EMOFACE_SECRETS_DIR = Join-Path $env:LOCALAPPDATA ('FaceAttend\phase6\private\qa_' + [guid]::NewGuid().ToString('N'))
+.\.venv\Scripts\python.exe docker\setup_secrets.py --directory $env:EMOFACE_SECRETS_DIR --qa
+docker compose build api frontend
+docker compose up -d --wait --wait-timeout 180
+$env:EMOFACE_PHASE6_LIVE = '1'
+.\.venv\Scripts\python.exe -m pytest -q tests/phase6 -o junit_family=legacy
+docker compose down
+Remove-Item Env:\EMOFACE_PHASE6_LIVE
+Remove-Item Env:\COMPOSE_PROJECT_NAME
+```
+
+The adult-image test skips unless `EMOFACE_PHASE6_INPUT_MANIFEST` points to a protected local JSON file containing `adult_consent: true`, `persistent_enrollment_consent: true`, a `references` array of 3–5 image paths and a `probe` image path. Supply only explicitly consented adult inputs, keep this manifest outside OneDrive/source control, and clear the variable after testing. The test deletes its isolated registrations. Never use production credentials or volumes. Restore `EMOFACE_SECRETS_DIR` to your original operator directory before returning to the normal stack. No held-out evaluation or retraining occurs during container acceptance.
 
 ## Privacy and limitations
 
