@@ -25,6 +25,10 @@ data/phase2_local/
 *.pem
 *.secret
 *.onnx
+# Only the three reviewed portable runtime weights may be published through LFS.
+!/model-assets/faceattend_best.pt
+!/model-assets/det_10g.onnx
+!/model-assets/w600k_r50.onnx
 *.mp4
 *.avi
 *.mov

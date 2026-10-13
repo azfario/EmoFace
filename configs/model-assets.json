@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "asset": "model-assets/faceattend_best.pt",
+      "runtime": "faceattend_best.pt",
+      "bytes": 6223975,
+      "sha256": "4a07e3558d81a5a3d215071eea9c215e4ce965897aef7a4c9652481a762bb259"
+    },
+    {
+      "asset": "model-assets/det_10g.onnx",
+      "runtime": "external/insightface/models/buffalo_l/det_10g.onnx",
+      "bytes": 16923827,
+      "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"
+    },
+    {
+      "asset": "model-assets/w600k_r50.onnx",
+      "runtime": "external/insightface/models/buffalo_l/w600k_r50.onnx",
+      "bytes": 174383860,
+      "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 # Resolve the built-in ACL module from this PowerShell edition, including when
 # Windows PowerShell 5.1 inherits a PSModulePath from PowerShell 7.
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+. (Join-Path $PSScriptRoot 'ModelAssets.ps1')
 
 function ConvertTo-EmoFaceNativeArgument([string]$Value) {
     '"' + [regex]::Replace([regex]::Replace($Value, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
@@ -148,13 +149,6 @@ function Start-EmoFace {
     if ($ProjectName -notmatch '^[a-z0-9][a-z0-9_-]{0,62}$') { throw 'Use a lowercase Compose project name containing letters, numbers, underscores or hyphens.' }
     try { $models = [IO.Path]::GetFullPath($ModelsDirectory) } catch { throw 'The selected model directory is invalid.' }
     if ($models.Contains(',')) { throw 'The model directory cannot contain a comma.' }
-    foreach ($relative in @('faceattend_best.pt', 'external/insightface/models/buffalo_l/det_10g.onnx', 'external/insightface/models/buffalo_l/w600k_r50.onnx')) {
-        if ($Stop) { continue }
-        $path = Join-Path $models $relative
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
-            throw 'Supply the three authorized model files at the README model paths before starting.'
-        }
-    }
     $secrets = Resolve-EmoFaceSecretPath -Value $SecretsDirectory -Root $Root
     $oldEnvironment = @{}
     foreach ($name in @('EMOFACE_MODELS_DIR', 'EMOFACE_SECRETS_DIR', 'COMPOSE_PROJECT_NAME')) { $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -164,6 +158,17 @@ function Start-EmoFace {
         $mutex = New-Object Threading.Mutex($false, ('Local\EmoFaceStartup_' + $sid + '_' + $ProjectName))
         try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
         if (-not $owned) { throw 'Another launcher is already configuring this project. Wait for it to finish.' }
+        if (-not $Stop) {
+            if ($models.Equals([IO.Path]::GetFullPath((Join-Path $Root 'models')), [StringComparison]::OrdinalIgnoreCase)) {
+                Initialize-EmoFaceModelAssets $Root $models
+            }
+            foreach ($relative in @('faceattend_best.pt', 'external/insightface/models/buffalo_l/det_10g.onnx', 'external/insightface/models/buffalo_l/w600k_r50.onnx')) {
+                $path = Join-Path $models $relative
+                if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0 -or (Test-EmoFaceLFSPointer $path)) {
+                    throw 'Model files are missing or still Git LFS pointers. Install Git LFS and pull the repository assets, or supply valid models at the README runtime paths.'
+                }
+            }
+        }
         $engine = Invoke-EmoFaceRequired -Arguments @('info', '--format', '{{.OSType}}') -Message 'Start Docker Desktop with its Linux engine and WSL2 enabled.' -TimeoutSeconds 30
         if ($engine.Trim() -ne 'linux') { throw 'Switch Docker Desktop to Linux containers with WSL2 GPU support.' }
         $endpoint = Invoke-EmoFaceRequired -Arguments @('context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}') -Message 'The selected Docker context is unavailable.' -TimeoutSeconds 30

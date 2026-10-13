@@ -10,28 +10,19 @@ This project explores how daily school check-ins could support early awareness o
 
 Run the app with Docker; Python, Node.js and PostgreSQL are supplied inside the containers.
 
-**Prerequisites:** Git, access to this private repository, and Docker Desktop running with Linux containers, WSL2 and NVIDIA GPU support. Model inference requires a compatible NVIDIA GPU and driver. See [Docker's GPU setup](https://docs.docker.com/desktop/features/gpu/).
+**Prerequisites:** Git with [Git LFS](https://git-lfs.com/), access to this private repository, and Docker Desktop running with Linux containers, WSL2 and NVIDIA GPU support. Model inference requires a compatible NVIDIA GPU and driver. See [Docker's GPU setup](https://docs.docker.com/desktop/features/gpu/).
 
 ### 1. Clone the repository
 
 ```powershell
 git clone https://github.com/azfario/EmoFace.git
 Set-Location EmoFace
+git lfs install --local
 ```
 
-### 2. Supply the model files
+### 2. Start the app
 
-Privately copy the three authorized model files into these paths:
-
-```text
-models/faceattend_best.pt
-models/external/insightface/models/buffalo_l/det_10g.onnx
-models/external/insightface/models/buffalo_l/w600k_r50.onnx
-```
-
-Model weights are supplied separately and are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license).
-
-### 3. Start the app
+The three reviewed model weights are included in this private repository through Git LFS. Git downloads them during cloning, or the launcher pulls them when needed. No manual model upload or copying is required.
 
 Open Docker Desktop and wait for its engine to be running, then run:
 
@@ -39,7 +30,7 @@ Open Docker Desktop and wait for its engine to be running, then run:
 .\start.ps1
 ```
 
-The launcher builds the containers, checks CUDA model inference, creates or reuses protected secrets, sets up PostgreSQL and waits for healthy services. First use downloads dependencies and builds large CUDA images; allow sufficient disk space and time. It opens [http://127.0.0.1:18080/app/](http://127.0.0.1:18080/app/) when ready. **No login or password prompt is required.**
+The launcher verifies the bundled model hashes, prepares missing runtime copies, builds the containers, checks CUDA model inference, creates or reuses protected secrets, sets up PostgreSQL and waits for healthy services. First use downloads dependencies and builds large CUDA images; allow sufficient disk space and time. It opens [http://127.0.0.1:18080/app/](http://127.0.0.1:18080/app/) when ready. **No login or password prompt is required.**
 
 Choose your camera, click **Start camera**, and confirm adult consent to enable analysis. Saved enrollments are available to anyone who can access the app on this PC.
 
@@ -49,7 +40,7 @@ To stop while keeping your data and secrets:
 .\start.ps1 -Stop
 ```
 
-For the next run, start Docker Desktop and run `.\start.ps1` again. If an older app stack is already running, stop it before launching an updated build. Custom paths/project names must be reused when stopping or restarting; see [Advanced development](#advanced-development).
+For the next run, start Docker Desktop and run `.\start.ps1` again. If an older app stack is already running, stop it before launching an updated build. The runtime model files still live under `models/`; existing models are preserved. Custom paths/project names must be reused when stopping or restarting; see [Advanced development](#advanced-development).
 
 ## Application and architecture
 
@@ -91,7 +82,7 @@ Identity matching remains **Unknown / unverified**: candidate similarity has no 
 
 Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. The default app has no operator login: anyone who can access it on this PC can view, enroll, revoke or delete retained records. It is intended for a trusted local PC, with loopback and same-origin restrictions. Temporary browser sessions expire after 15 minutes; the interface reconnects automatically after clearing temporary state. Cookies, CSRF checks and rate limits protect requests, but do not authenticate a person. Optional password mode is available with `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` (override the Compose API setting for Docker). Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
 
-Participant images, templates, credentials, keys, datasets, weights, database files, local documentation, handoffs and reports are excluded from publication. Original research artifacts remain preserved locally. This repository cleanup changes presentation and file tracking, not runtime behavior or the implemented project scope.
+Only the three reviewed runtime model assets are published through Git LFS in this private repository for non-commercial research. Participant images, templates, credentials, keys, datasets, other checkpoints/weights, database files, local documentation, handoffs and reports remain excluded from publication. Original research artifacts remain preserved locally. Git LFS changes model delivery; trained tensors, preprocessing, CUDA requirements and privacy controls remain unchanged.
 
 ## Advanced development
 
@@ -124,7 +115,14 @@ InsightFace is installed separately to avoid pulling in CPU `onnxruntime`; the e
 
 [requirements.txt](requirements.txt) installs app/ML dependencies; [requirements-dev.txt](requirements-dev.txt) adds tests and notebook tools. Both use the same tested pins in [constraints.txt](constraints.txt). For an app-only environment, use `-r requirements.txt` in place of `-r requirements-dev.txt`; the CUDA and separate InsightFace steps still apply. `pyproject.toml` retains the Python project/package configuration.
 
-Privately transfer the existing authorized model assets into these paths:
+Prepare the runtime model copies from the repository assets (existing local models are retained):
+
+```powershell
+. .\docker\Launcher.ps1
+Initialize-EmoFaceModelAssets -Root (Get-Location).Path -ModelsDirectory (Join-Path (Get-Location) 'models')
+```
+
+Runtime paths:
 
 ```text
 models/faceattend_best.pt
@@ -132,7 +130,7 @@ models/external/insightface/models/buffalo_l/det_10g.onnx
 models/external/insightface/models/buffalo_l/w600k_r50.onnx
 ```
 
-Weights, datasets and database storage are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license). Cloning transfers source, not those assets, participant data or permissions.
+The three runtime model assets are stored through Git LFS under `model-assets/`. The expression asset is a portable inference export with identical tensors; the original checkpoint and its research metadata remain local. Datasets, database storage, participant data and all other weights remain excluded. See the [model asset notice](model-assets/NOTICE.md) and [hash manifest](configs/model-assets.json) for provenance and InsightFace's non-commercial research terms. Cloning grants no additional dataset/model permissions.
 
 ### Native PostgreSQL and protected storage
 
@@ -235,7 +233,7 @@ Docker is an alternative runtime; it does not modify the native Windows environm
 
 #### Launcher options and retained data
 
-Clone the repository using an account with access, start Docker Desktop's Linux engine, and supply the three authorized model files at the [model paths above](#2-supply-the-model-files). From the checkout run:
+Clone the repository using an account with access, start Docker Desktop's Linux engine, and install Git LFS so the [repository model assets](model-assets/NOTICE.md) can download automatically. From the checkout run:
 
 ```powershell
 .\start.ps1
@@ -246,6 +244,8 @@ The [launcher](start.ps1) requires no local Python, Node, PyTorch or PostgreSQL 
 The login-free update passed 546 backend regression tests (64 optional integrations skipped), 44 final focused checks, 53 frontend tests, TypeScript and the production build. An isolated Docker startup and synthetic-image acceptance check confirmed no password prompt, automatic local access, CUDA readiness, consent enforcement, CSRF/Origin checks and workspace clearing. The changed login-free build has not been rechecked with a physical camera; the earlier camera acceptance remains historical evidence.
 
 The legacy operator record is retained for compatibility and optional password mode; fresh launcher setup generates a random dormant record. Existing secrets and encrypted data are preserved.
+
+The bundled assets live in `model-assets/` and are verified against `configs/model-assets.json`. The launcher prepares only missing files in the default `models/` directory; it never replaces existing local weights. Unhydrated LFS pointers trigger a scoped `git lfs pull`; failures stop startup with an actionable message. Custom `-ModelsDirectory` folders must contain their own valid runtime files. The bundled weights stay out of Docker build contexts and images.
 
 Default secrets are retained under `%LOCALAPPDATA%\FaceAttend\phase6\private\operator_secrets`, outside the checkout and OneDrive with restricted Windows ACLs. Subsequent runs reuse those secrets and the same Compose data volumes. Existing incomplete/insecure secrets, missing keys beside retained data, remote Docker contexts, unavailable models/GPU and conflicting ports are refused. No automatic key replacement, CPU fallback, data reset or volume deletion occurs. If the selected project is already running, the launcher leaves it running and reports its URL; stop the whole stack before rebuilding.
 
@@ -304,7 +304,7 @@ Use a whole-stack `down`/`up` when changing or rebuilding the frontend namespace
 
 **Backup and retention:** stop the stack before making a consistent, access-controlled backup of its named database and encrypted-reference volumes. Back up the protected host secret directory independently; key loss makes templates unreadable. The API's key copies are temporary memory files, while non-secret credential fingerprints prevent accidental rotation. Restoring requires the matching database, encrypted references and secrets as one coordinated set, the same compatible model assets, and a fresh GPU/readiness check. Backups can retain deleted identities; apply the same consent and maximum 30-day retention policy to them. The app provides revoke/delete and expiry cleanup, but does not promise secure erasure from SSDs or backups. Secret rotation and backup restoration are manual operations, not automatic features.
 
-`docker compose down --volumes` would erase Compose-owned data; it is deliberately not part of setup, tests or normal shutdown. Do not use pruning as a troubleshooting shortcut. PostgreSQL logs omit statements and bind values, and HTTP access logging is disabled. Models, photographs, keys, credentials, handoffs and reports do not enter the build context or final images.
+`docker compose down --volumes` would erase Compose-owned data; it is deliberately not part of setup, tests or normal shutdown. Do not use pruning as a troubleshooting shortcut. PostgreSQL logs omit statements and bind values, and HTTP access logging is disabled. Model assets, photographs, keys, credentials, handoffs and reports do not enter the build context or final images; models are mounted read-only at runtime.
 
 For troubleshooting, use `docker compose ps -a` and coarse service health. Verify the phone/OBS source separately if browser preview fails. If CUDA fails, check WSL2, Docker's GPU device access, driver and the pinned CUDA 12/cuDNN 9 environment using the synthetic GPU checker. If database initialization/migrations fail, verify the scoped secret mounts and volume ownership; preserve volumes and never point Compose at the native cluster. If port 18080 is occupied, stop the unrelated conflict only with its owner's approval; changing the port requires updating both Compose and the proxy's exact Host/Origin allowlist.
 
