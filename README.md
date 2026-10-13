@@ -6,6 +6,50 @@
 
 This project explores how daily school check-ins could support early awareness of students' emotional wellbeing and encourage timely intervention. Facial-expression predictions are intended as supportive indicators, not as a means of diagnosing depression or determining a student's actual emotional state.
 
+## Quick start (Windows + Docker)
+
+Run the app with Docker; Python, Node.js and PostgreSQL are supplied inside the containers.
+
+**Prerequisites:** Git, access to this private repository, and Docker Desktop running with Linux containers, WSL2 and NVIDIA GPU support. Model inference requires a compatible NVIDIA GPU and driver. See [Docker's GPU setup](https://docs.docker.com/desktop/features/gpu/).
+
+### 1. Clone the repository
+
+```powershell
+git clone https://github.com/azfario/EmoFace.git
+Set-Location EmoFace
+```
+
+### 2. Supply the model files
+
+Privately copy the three authorized model files into these paths:
+
+```text
+models/faceattend_best.pt
+models/external/insightface/models/buffalo_l/det_10g.onnx
+models/external/insightface/models/buffalo_l/w600k_r50.onnx
+```
+
+Model weights are supplied separately and are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license).
+
+### 3. Start the app
+
+Open Docker Desktop and wait for its engine to be running, then run:
+
+```powershell
+.\start.ps1
+```
+
+The launcher builds the containers, checks CUDA model inference, creates or reuses protected secrets, sets up PostgreSQL and waits for healthy services. First use downloads dependencies and builds large CUDA images; allow sufficient disk space and time. It opens [http://127.0.0.1:18080/app/](http://127.0.0.1:18080/app/) when ready. **No login or password prompt is required.**
+
+Choose your camera, click **Start camera**, and confirm adult consent to enable analysis. Saved enrollments are available to anyone who can access the app on this PC.
+
+To stop while keeping your data and secrets:
+
+```powershell
+.\start.ps1 -Stop
+```
+
+For the next run, start Docker Desktop and run `.\start.ps1` again. If an older app stack is already running, stop it before launching an updated build. Custom paths/project names must be reused when stopping or restarting; see [Advanced development](#advanced-development).
 
 ## Application and architecture
 
@@ -41,17 +85,30 @@ The selected model's lowest held-out per-class F1 values were disgust **0.4498**
 
 Inspect the [baseline training notebook](notebooks/02_M0_Pretrained_Baseline_Training.ipynb), [augmented training notebook](notebooks/03_M1_Pretrained_Augmented_Training.ipynb) and [comparison/export notebook](notebooks/04_Model_Comparison_and_Export.ipynb). Published notebooks contain source without captured outputs. To reproduce research, supply an authorized dataset at the paths in [the configuration](configs/common.yaml), inspect its provenance/consent settings for your own data, then run notebooks 01–04 in order. This setup does not grant dataset permissions. [The result validator](scripts/validate_results.py) reconciles retained local receipts without repeating held-out inference.
 
-## Install and build
+## Privacy and limitations
 
-For Docker-only use on Windows, go directly to [Local GPU Docker Compose](#local-gpu-docker-compose). Its launcher builds dependencies inside containers; the native Python/Node installation below is for local development.
+Identity matching remains **Unknown / unverified**: candidate similarity has no validated acceptance threshold. Expression scores are uncalibrated visible-category predictions and do not establish actual feelings, wellbeing or diagnosis. This prototype is not a clinical, liveness or automated attendance decision system.
+
+Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. The default app has no operator login: anyone who can access it on this PC can view, enroll, revoke or delete retained records. It is intended for a trusted local PC, with loopback and same-origin restrictions. Temporary browser sessions expire after 15 minutes; the interface reconnects automatically after clearing temporary state. Cookies, CSRF checks and rate limits protect requests, but do not authenticate a person. Optional password mode is available with `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` (override the Compose API setting for Docker). Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
+
+Participant images, templates, credentials, keys, datasets, weights, database files, local documentation, handoffs and reports are excluded from publication. Original research artifacts remain preserved locally. This repository cleanup changes presentation and file tracking, not runtime behavior or the implemented project scope.
+
+## Advanced development
+
+The sections below cover native development, database administration and detailed Docker operations. They are optional for the Docker quick start.
+
+<details>
+<summary>Native Python/Node environment, PostgreSQL configuration and tests</summary>
+
+### Native installation and build
+
+Use this workflow when developing or training directly on Windows. To run the app through Docker, use [Quick start](#quick-start-windows--docker).
 
 The verified stack is **Windows, Python 3.12.14, PyTorch 2.13.0+cu126, ONNX Runtime GPU 1.20.2, Node 22.13.0/npm 10.9.2**, with an NVIDIA RTX 3060 Laptop GPU. Other hardware/installations must be verified independently; model inference requires CUDA.
 
-Clone using your own GitHub account and recreate the environment:
+From an existing checkout, create the native development environment:
 
 ```powershell
-git clone https://github.com/azfario/EmoFace.git
-Set-Location EmoFace
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu126
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
@@ -77,7 +134,7 @@ models/external/insightface/models/buffalo_l/w600k_r50.onnx
 
 Weights, datasets and database storage are excluded from Git. Third-party face weights have separate [InsightFace model-use terms](https://github.com/deepinsight/insightface#license). Cloning transfers source, not those assets, participant data or permissions.
 
-## Configure PostgreSQL and the operator
+### Native PostgreSQL and protected storage
 
 Use an isolated local PostgreSQL cluster, bound to `127.0.0.1`; the verified laptop uses port **55432**. Install PostgreSQL separately if needed. For a new empty cluster, initialize with a password prompt and SCRAM authentication; never initialize an existing database directory:
 
@@ -139,7 +196,7 @@ $env:FACEATTEND_OPERATOR_AUTH_FILE = Join-Path $faceattendPrivate 'secrets\opera
 
 The helper prompts for your chosen password, protects the files and refuses to overwrite existing secrets. [.env.example](.env.example) documents settings; the app does not automatically load `.env`.
 
-## Run and test
+### Native launch and tests
 
 In the same shell, enter your runtime URL using `faceattend_runtime`, then start the single-worker loopback app:
 
@@ -163,7 +220,12 @@ Run source-checkout checks:
 
 The source-only publication checks passed **501 Python tests**, with **59 optional tests skipped**, and **50 frontend tests**, plus TypeScript and the production build. The original environment also completed **560 Python tests** with explicitly configured GPU/database/private-input integrations. Fresh-PC installation has not been independently tested. The check launcher disables private-input/database/saved-model integration flags, creates ignored local output directories and needs no historical handoffs.
 
-## Local GPU Docker Compose
+</details>
+
+<details>
+<summary>Docker options, deployment details, backups, troubleshooting and integration tests</summary>
+
+### Docker deployment details and verification
 
 GPU Docker deployment is implemented and tested on the original laptop, including an isolated PostgreSQL database, protected operator/encryption secrets, CUDA-only model inference and a localhost browser interface. The Docker acceptance suite passed **14 tests**. The owner also confirmed the Camo → OBS Virtual Camera feed, adult-consent gating, successive face-box/Emotion updates, Stop camera and End session through the Docker-served page.
 
@@ -171,9 +233,9 @@ The physical-camera run included three HTTP refusals and two overlapping HTTP ha
 
 Docker is an alternative runtime; it does not modify the native Windows environment or its database. Use Docker Desktop with **Linux containers, WSL2 and NVIDIA GPU support**. The tested laptop has a 6 GB RTX 3060 GPU. Plan for **40 GB of free disk headroom for a first CUDA image build**, in addition to existing Docker storage, and monitor space during export. The successful laptop retry began with 41.2 GiB free and already cached CUDA layers; this is not a measured fresh-install minimum. Build downloads require internet; the running application blocks new outbound connections and DNS. See [Docker's GPU prerequisites](https://docs.docker.com/desktop/features/gpu/) and [Compose GPU reservations](https://docs.docker.com/compose/how-tos/gpu-support/).
 
-### Windows one-command startup
+#### Launcher options and retained data
 
-Clone the repository using an account with access, start Docker Desktop's Linux engine, and supply the three authorized model files at the [model paths above](#install-and-build). From the checkout run:
+Clone the repository using an account with access, start Docker Desktop's Linux engine, and supply the three authorized model files at the [model paths above](#2-supply-the-model-files). From the checkout run:
 
 ```powershell
 .\start.ps1
@@ -210,7 +272,7 @@ Only Nginx publishes a host port, bound to IPv4 loopback. The shared namespace p
 
 The [Compose manifest](compose.yaml) creates separate database, encrypted-reference and network-state volumes. It never mounts the native PostgreSQL cluster at port 55432. Only the API reserves a GPU; frontend/API run as non-root, and the database initialization and namespace guard use narrowly scoped elevated container privileges. Images use digest-pinned bases, a [separate complete Linux package lock](docker/requirements-linux-lock.txt), read-only runtime filesystems and explicit source-only build inputs. The Linux loader path includes the installed CUDA/cuDNN libraries; Windows constraints remain unchanged. Face-model CPU fallback remains disabled, and health requires actual model and registration-database readiness.
 
-### Advanced manual setup
+#### Manual Compose workflow
 
 The launcher above is the Docker-only path. For operators who prefer the existing manual workflow, the host secret helper requires the native Python dependencies described earlier. From the checkout, create **new** protected Compose secrets; the helper prompts for your chosen operator password and refuses an existing directory:
 
@@ -264,10 +326,4 @@ Remove-Item Env:\COMPOSE_PROJECT_NAME
 
 The adult-image test skips unless `EMOFACE_PHASE6_INPUT_MANIFEST` points to a protected local JSON file containing `adult_consent: true`, `persistent_enrollment_consent: true`, a `references` array of 3–5 image paths and a `probe` image path. Supply only explicitly consented adult inputs, keep this manifest outside OneDrive/source control, and clear the variable after testing. The test deletes its isolated registrations. Never use production credentials or volumes. Restore `EMOFACE_SECRETS_DIR` to your original operator directory before returning to the normal stack. No held-out evaluation or retraining occurs during container acceptance.
 
-## Privacy and limitations
-
-Identity matching remains **Unknown / unverified**: candidate similarity has no validated acceptance threshold. Expression scores are uncalibrated visible-category predictions and do not establish actual feelings, wellbeing or diagnosis. This prototype is not a clinical, liveness or automated attendance decision system.
-
-Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. The default app has no operator login: anyone who can access it on this PC can view, enroll, revoke or delete retained records. It is intended for a trusted local PC, with loopback and same-origin restrictions. Temporary browser sessions expire after 15 minutes; the interface reconnects automatically after clearing temporary state. Cookies, CSRF checks and rate limits protect requests, but do not authenticate a person. Optional password mode is available with `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` (override the Compose API setting for Docker). Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
-
-Participant images, templates, credentials, keys, datasets, weights, database files, local documentation, handoffs and reports are excluded from publication. Original research artifacts remain preserved locally. This repository cleanup changes presentation and file tracking, not runtime behavior or the implemented project scope.
+</details>
