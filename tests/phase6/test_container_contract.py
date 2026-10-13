@@ -70,6 +70,14 @@ def test_outbound_guard_is_namespace_scoped_and_startup_checks_its_marker():
     runtime=(ROOT/'docker/runtime.py').read_text()
     assert "Path('/netstate/namespace').read_text().strip()!=os.readlink('/proc/self/ns/net')" in runtime
 
+def test_linux_shell_scripts_keep_linux_line_endings():
+    attributes=(ROOT/'.gitattributes').read_text().splitlines()
+    assert '*.sh text eol=lf' in attributes
+    for path in (ROOT/'docker').glob('*.sh'):
+        content=path.read_bytes()
+        assert content.startswith(b'#!/bin/sh\n'), path.name
+        assert b'\r' not in content, path.name
+
 def test_static_frontend_security_matches_native_policy():
     from faceattend_ui.integration import CSP
     config=(ROOT/'docker/nginx.conf').read_text()
