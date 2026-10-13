@@ -55,8 +55,9 @@ def initialized_models():
 
 
 def login(client):
+    required=client.get('/api/v1/demo/ui-status').json().get('login_required',True)
     result = client.post('/api/v1/demo/session', headers={'x-faceattend-login':'1'},
-                         json={'password':'Fictional Phase 6 operator password'})
+                         json={'password':'Fictional Phase 6 operator password'} if required else {})
     assert result.status_code == 200, 'QA login failed; response withheld.'
     return {'x-faceattend-csrf':result.json()['csrf_token']}
 

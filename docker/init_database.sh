@@ -1,5 +1,12 @@
 #!/bin/sh
 set -eu
+# Refuse unreadable/empty files instead of creating roles without passwords.
+for secret_file in /run/secrets/db_owner_password /run/secrets/db_runtime_password; do
+    if [ ! -r "$secret_file" ] || [ ! -s "$secret_file" ]; then
+        echo 'Compose database secret files are unreadable or empty.' >&2
+        exit 1
+    fi
+done
 # Secret substitution stays inside psql, with all raw diagnostics suppressed.
 if ! psql --no-psqlrc --username "$POSTGRES_USER" --dbname postgres --set ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL'
 \set owner_password `cat /run/secrets/db_owner_password`

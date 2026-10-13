@@ -50,6 +50,7 @@ export class API {
   }
   mutation(extra:Record<string,string>={}){if(!this.csrf)throw new PublicError('OPERATOR_AUTH_REQUIRED',401);return {'x-faceattend-csrf':this.csrf,...extra};}
   async login(password:string){const value=await this.request<{csrf_token:string;expires_in_seconds:number}>('/api/v1/demo/session',{method:'POST',headers:{'Content-Type':'application/json','x-faceattend-login':'1'},body:JSON.stringify({password})});this.csrf=value.csrf_token;return value.expires_in_seconds;}
+  async open(){const value=await this.request<{csrf_token:string;expires_in_seconds:number}>('/api/v1/demo/session',{method:'POST',headers:{'Content-Type':'application/json','x-faceattend-login':'1'},body:'{}'});this.csrf=value.csrf_token;return value.expires_in_seconds;}
   async logout(){const token=this.csrf;this.clear();if(token)await this.request('/api/v1/demo/session',{method:'DELETE',headers:{'x-faceattend-csrf':token},keepalive:true});}
   async status(){const [models,ui]=await Promise.all([this.request<ModelInfo>('/api/v1/models/info'),this.request<UIStatus>('/api/v1/demo/ui-status')]);return {models,ui};}
   list(page=1){return this.request<{enrollments:Enrollment[]}>('/api/v1/demo/enrollments?page='+page);}

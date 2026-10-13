@@ -84,6 +84,7 @@ services:
       network_guard: {condition: service_completed_successfully}
     environment:
       FACEATTEND_ENROLLMENT_ENABLED: "true"
+      FACEATTEND_OPERATOR_LOGIN_REQUIRED: "false"
       FACEATTEND_FRONTEND_ENABLED: "true"
       FACEATTEND_FACE_ANALYSIS_ENABLED: "true"
       FACEATTEND_CANDIDATES_ENABLED: "true"

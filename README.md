@@ -21,7 +21,8 @@ Browser camera / image → React + TypeScript → local FastAPI
 - Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
 - Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
 - Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
-- Stop camera, End session, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
+- The app opens without a login. All local users can manage saved enrollments; temporary browser sessions still enforce CSRF protection and request limits.
+- Stop camera, Clear workspace, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
 
 The backend uses CUDA PyTorch and ONNX Runtime GPU, FastAPI and SQLAlchemy/Alembic. The frontend uses React, TypeScript and Vite. Runtime APIs, migrations and model interfaces are retained alongside the ML research code.
 
@@ -41,6 +42,8 @@ The selected model's lowest held-out per-class F1 values were disgust **0.4498**
 Inspect the [baseline training notebook](notebooks/02_M0_Pretrained_Baseline_Training.ipynb), [augmented training notebook](notebooks/03_M1_Pretrained_Augmented_Training.ipynb) and [comparison/export notebook](notebooks/04_Model_Comparison_and_Export.ipynb). Published notebooks contain source without captured outputs. To reproduce research, supply an authorized dataset at the paths in [the configuration](configs/common.yaml), inspect its provenance/consent settings for your own data, then run notebooks 01–04 in order. This setup does not grant dataset permissions. [The result validator](scripts/validate_results.py) reconciles retained local receipts without repeating held-out inference.
 
 ## Install and build
+
+For Docker-only use on Windows, go directly to [Local GPU Docker Compose](#local-gpu-docker-compose). Its launcher builds dependencies inside containers; the native Python/Node installation below is for local development.
 
 The verified stack is **Windows, Python 3.12.14, PyTorch 2.13.0+cu126, ONNX Runtime GPU 1.20.2, Node 22.13.0/npm 10.9.2**, with an NVIDIA RTX 3060 Laptop GPU. Other hardware/installations must be verified independently; model inference requires CUDA.
 
@@ -150,7 +153,7 @@ $env:FACEATTEND_DB_TELEMETRY_ENABLED = 'false'
 .\.venv\Scripts\python.exe scripts\phase3_serve.py
 ```
 
-Open `http://127.0.0.1:8000/app/`, sign in with your chosen operator password, select a camera and confirm adult consent. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
+Open `http://127.0.0.1:8000/app/`, select a camera and confirm adult consent. Login is disabled by default when enrollment is enabled. Optional password mode uses `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` and the configured operator record. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
 
 Run source-checkout checks:
 
@@ -168,6 +171,30 @@ The physical-camera run included three HTTP refusals and two overlapping HTTP ha
 
 Docker is an alternative runtime; it does not modify the native Windows environment or its database. Use Docker Desktop with **Linux containers, WSL2 and NVIDIA GPU support**. The tested laptop has a 6 GB RTX 3060 GPU. Plan for **40 GB of free disk headroom for a first CUDA image build**, in addition to existing Docker storage, and monitor space during export. The successful laptop retry began with 41.2 GiB free and already cached CUDA layers; this is not a measured fresh-install minimum. Build downloads require internet; the running application blocks new outbound connections and DNS. See [Docker's GPU prerequisites](https://docs.docker.com/desktop/features/gpu/) and [Compose GPU reservations](https://docs.docker.com/compose/how-tos/gpu-support/).
 
+### Windows one-command startup
+
+Clone the repository using an account with access, start Docker Desktop's Linux engine, and supply the three authorized model files at the [model paths above](#install-and-build). From the checkout run:
+
+```powershell
+.\start.ps1
+```
+
+The [launcher](start.ps1) requires no local Python, Node, PyTorch or PostgreSQL installation. It builds the app image, checks actual CUDA model inference, creates the five secret files without a password prompt through a temporary container, builds the frontend and waits for the app to become healthy at `http://127.0.0.1:18080/app/`. The browser then opens; camera permission, activation and adult consent remain manual. First use downloads the pinned container dependencies and can take time.
+
+The login-free update passed 546 backend regression tests (64 optional integrations skipped), 44 final focused checks, 53 frontend tests, TypeScript and the production build. An isolated Docker startup and synthetic-image acceptance check confirmed no password prompt, automatic local access, CUDA readiness, consent enforcement, CSRF/Origin checks and workspace clearing. The changed login-free build has not been rechecked with a physical camera; the earlier camera acceptance remains historical evidence.
+
+The legacy operator record is retained for compatibility and optional password mode; fresh launcher setup generates a random dormant record. Existing secrets and encrypted data are preserved.
+
+Default secrets are retained under `%LOCALAPPDATA%\FaceAttend\phase6\private\operator_secrets`, outside the checkout and OneDrive with restricted Windows ACLs. Subsequent runs reuse those secrets and the same Compose data volumes. Existing incomplete/insecure secrets, missing keys beside retained data, remote Docker contexts, unavailable models/GPU and conflicting ports are refused. No automatic key replacement, CPU fallback, data reset or volume deletion occurs. If the selected project is already running, the launcher leaves it running and reports its URL; stop the whole stack before rebuilding.
+
+For existing installations or model files stored elsewhere, use explicit paths and the **same project name and matching secrets**:
+
+```powershell
+.\start.ps1 -ModelsDirectory 'D:\EmoFaceModels' -SecretsDirectory 'C:\Private\EmoFaceSecrets' -ProjectName 'emoface_local' -NoBrowser
+```
+
+`EMOFACE_MODELS_DIR`, `EMOFACE_SECRETS_DIR` and `COMPOSE_PROJECT_NAME` are also honored when their corresponding parameters are omitted. A successful launch leaves those variables set in the current PowerShell process, so `docker compose down` in that window also works. To stop from a new window, use `./start.ps1 -Stop` with the same project/path parameters as your launch; no volumes or secrets are removed. An unsuccessful launch keeps created secrets/volumes for recovery and refuses to call a partially started stack ready. Stop that selected stack before retrying. The launcher checks local setup on PC 1; independent second-PC reproducibility still needs validation.
+
 ```text
 Browser → 127.0.0.1:18080 → Nginx frontend
                                │ shared Compose network namespace
@@ -183,7 +210,9 @@ Only Nginx publishes a host port, bound to IPv4 loopback. The shared namespace p
 
 The [Compose manifest](compose.yaml) creates separate database, encrypted-reference and network-state volumes. It never mounts the native PostgreSQL cluster at port 55432. Only the API reserves a GPU; frontend/API run as non-root, and the database initialization and namespace guard use narrowly scoped elevated container privileges. Images use digest-pinned bases, a [separate complete Linux package lock](docker/requirements-linux-lock.txt), read-only runtime filesystems and explicit source-only build inputs. The Linux loader path includes the installed CUDA/cuDNN libraries; Windows constraints remain unchanged. Face-model CPU fallback remains disabled, and health requires actual model and registration-database readiness.
 
-From the checkout, with the native helper dependencies installed as above, create **new** protected Compose secrets. This prompts for your chosen operator password and refuses an existing directory:
+### Advanced manual setup
+
+The launcher above is the Docker-only path. For operators who prefer the existing manual workflow, the host secret helper requires the native Python dependencies described earlier. From the checkout, create **new** protected Compose secrets; the helper prompts for your chosen operator password and refuses an existing directory:
 
 ```powershell
 $env:EMOFACE_MODELS_DIR = Join-Path (Get-Location) 'models'
@@ -200,7 +229,7 @@ docker compose up -d --wait --wait-timeout 180
 
 The GPU check runs the mounted saved models on synthetic tensors and requires exclusive CUDA computation. Stop if it fails; do not substitute a CPU service. One-shot migrations use the owner credential; the API receives only the restricted runtime database password, operator record and encryption key. Keep all five generated secret files outside the checkout and OneDrive, under their protected ACL. No default production password is supplied. `--qa` creates a separately scoped fictional test fixture only; it is not an operator setup shortcut.
 
-Open `http://127.0.0.1:18080/app/` and sign in with the password you chose. Start the camera yourself and confirm adult consent; the existing automatic expression/outline workflow then operates as before. The container tests do not request camera permission. Enrollment requires 3–5 distinct acceptable images and encrypted-reference consent. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
+Open `http://127.0.0.1:18080/app/`; no login is required. Start the camera yourself and confirm adult consent; the existing automatic expression/outline workflow then operates as before. The container tests do not request camera permission. Enrollment requires 3–5 distinct acceptable images and encrypted-reference consent. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
 
 To stop, preserve data and restart later:
 
@@ -239,6 +268,6 @@ The adult-image test skips unless `EMOFACE_PHASE6_INPUT_MANIFEST` points to a pr
 
 Identity matching remains **Unknown / unverified**: candidate similarity has no validated acceptance threshold. Expression scores are uncalibrated visible-category predictions and do not establish actual feelings, wellbeing or diagnosis. This prototype is not a clinical, liveness or automated attendance decision system.
 
-Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. Operator sessions expire after 15 minutes; same-origin cookies and CSRF protection protect local operations. Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
+Enrollment requires adult consent and encrypted-reference retention consent, with a maximum 30-day retention period and revoke/delete controls. The default app has no operator login: anyone who can access it on this PC can view, enroll, revoke or delete retained records. It is intended for a trusted local PC, with loopback and same-origin restrictions. Temporary browser sessions expire after 15 minutes; the interface reconnects automatically after clearing temporary state. Cookies, CSRF checks and rate limits protect requests, but do not authenticate a person. Optional password mode is available with `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` (override the Compose API setting for Docker). Retained names/consent metadata and encrypted references stay on the operator's device. Administrators, compromised devices and backups remain outside that protection.
 
 Participant images, templates, credentials, keys, datasets, weights, database files, local documentation, handoffs and reports are excluded from publication. Original research artifacts remain preserved locally. This repository cleanup changes presentation and file tracking, not runtime behavior or the implemented project scope.

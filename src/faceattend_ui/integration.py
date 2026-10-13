@@ -67,7 +67,8 @@ async def ui_status(request:Request):
             except Exception:pass
             finally:telemetry.gate.release()
         return {'fixture_mode':request.app.state.ui.fixture_mode,'registration_database':database,
-            'operator_auth_ready':dependencies.auth is not None,'candidates_enabled':request.app.state.candidates.enabled,
+            'operator_auth_ready':dependencies.auth is not None,'login_required':dependencies.auth.login_required if dependencies.auth is not None else dependencies.settings.login_required,
+            'candidates_enabled':request.app.state.candidates.enabled,
             'analysis_enabled':request.app.state.face_analysis.enabled,'telemetry_enabled':telemetry.settings.enabled,
             'anonymous_totals':totals}
     return await anyio.to_thread.run_sync(read)

@@ -3,7 +3,7 @@ from .config import EnrollmentSettings
 from .repository import EnrollmentRepository,enrollment_runtime_ready
 from .files import GalleryFiles
 from .service import EnrollmentService
-from .auth import OperatorAuth
+from .auth import OperatorAuth,LocalAccess
 from .security import read_secret
 from .errors import EnrollmentError
 
@@ -24,7 +24,7 @@ class EnrollmentDependencies:
         if self.injected: return
         if not self.settings.enabled: return
         try:
-            self.auth=OperatorAuth.from_file(self.settings.auth_file)
+            self.auth=OperatorAuth.from_file(self.settings.auth_file) if self.settings.login_required else LocalAccess()
             self.engine=make_engine(self.settings.database_url)
             factory=sessions(self.engine)
             if not enrollment_runtime_ready(factory): raise EnrollmentError('ENROLLMENT_UNAVAILABLE')

@@ -36,8 +36,10 @@ async def login(request:Request):
     if request.headers.get('x-faceattend-login')!='1': raise EnrollmentError('CSRF_REQUIRED')
     auth=request.app.state.enrollment.require_auth()
     data=await private_json(request)
-    if set(data)!={'password'}: raise EnrollmentError('ENROLLMENT_INVALID_REQUEST')
-    try: token,csrf=await anyio.to_thread.run_sync(auth.login,data['password'])
+    if set(data)!=({'password'} if auth.login_required else set()): raise EnrollmentError('ENROLLMENT_INVALID_REQUEST')
+    try:
+        if auth.login_required:token,csrf=await anyio.to_thread.run_sync(auth.login,data['password'])
+        else:token,csrf=auth.open_session(request)
     finally: data.clear()
     response=JSONResponse({'status':'operator_session_active','csrf_token':csrf,'expires_in_seconds':900})
     response.set_cookie(COOKIE,token,max_age=900,httponly=True,samesite='strict',secure=False,path='/api/v1/demo')
@@ -45,7 +47,7 @@ async def login(request:Request):
 
 @router.delete('/session')
 def logout(request:Request):
-    authorization(request,True).require_auth().logout()
+    authorization(request,True).require_auth().logout(request)
     response=JSONResponse({'status':'operator_session_ended'})
     response.delete_cookie(COOKIE,path='/api/v1/demo',httponly=True,samesite='strict')
     return response
