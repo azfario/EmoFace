@@ -17,7 +17,7 @@ class FaceAnalysis:
         face,blurry=expression_detection(image,bundle,allow_blurry_expression)
         if face.status==Status.NO_FACE:return self.output([])
         if face.status!=Status.OK:raise core_error(face.status)
-        rgb=rgb_crop(image,face)
+        rgb=rgb_crop(image,face,getattr(bundle,'quality_policy',None))
         try:expression=self.expression.predict(rgb)
         finally:rgb.close()
         identity=CandidateService.output([],True,'CANDIDATE_SEARCH_NOT_REQUESTED')

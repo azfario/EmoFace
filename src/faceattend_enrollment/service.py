@@ -36,7 +36,8 @@ class EnrollmentService:
             attempted=False
             try:
                 result=enroll_user(self.files.user(locator),images,store,bundle,adult_consent=True,identity_consent=True)
-                if result.status!=Status.OK: raise core_error(result.status)
+                if result.status!=Status.OK: raise core_error(result.status,
+                    photo_number=result.photo_number, quality_reason=result.quality_reason)
                 self._check_template(store,locator,bundle.model_id,bundle.embedding_dim)
                 # No DB transaction exists while GPU inference is running.
                 entry=Record(identity_id,display_name,locator,now,PURPOSE,self.clock(),now+timedelta(days=days),'pending',bundle.model_id)

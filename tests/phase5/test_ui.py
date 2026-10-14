@@ -57,7 +57,7 @@ def test_candidates_without_expression_still_unknown(ui):
     identity=response.json()['faces'][0]['identity_diagnostic']
     assert identity['candidate_count']==1 and identity['verified'] is False and identity['identity_status']=='Unknown (unverified)'
 
-@pytest.mark.parametrize('mode',['multiple','clipped','exception'])
+@pytest.mark.parametrize('mode',['multiple','over_clipped','exception'])
 def test_preview_qc_and_bystander_failures(ui,mode):
     ui.context.bundle.detector.mode=mode
     response=preview(ui,params={'include_face_box':'true'})

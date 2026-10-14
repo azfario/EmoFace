@@ -67,11 +67,18 @@ def detect_single_face(image, model_bundle):
         if len(boxes) != 1:
             return FaceResult(Status.MULTIPLE_FACES, 'Use an image containing exactly one face.')
         if points is None:
-            raise VerificationError(Status.LOW_QUALITY_IMAGE, 'Five facial keypoints are required.')
-        quality = assess_face(image, np.asarray(boxes[0,:4]), np.asarray(points[0]), model_bundle.config)
+            raise VerificationError(Status.LOW_QUALITY_IMAGE, 'Five facial keypoints are required.', quality_reason='landmarks')
+        bbox = np.asarray(boxes[0,:4]).copy()
+        quality = assess_face(image, bbox, np.asarray(points[0]), model_bundle.config,
+                              getattr(model_bundle, 'quality_policy', None))
+        bbox[[0,2]] = np.clip(bbox[[0,2]], 0, image.shape[1])
+        bbox[[1,3]] = np.clip(bbox[[1,3]], 0, image.shape[0])
         aligned = model_bundle.align(image, landmark=points[0], image_size=112)
-        return FaceResult(Status.OK, bbox=boxes[0,:4], landmarks=points[0], aligned=aligned, quality=quality)
+        if (not isinstance(aligned, np.ndarray) or aligned.shape != (112,112,3)
+                or aligned.dtype != np.uint8 or not aligned.any()):
+            raise VerificationError(Status.LOW_QUALITY_IMAGE, 'Face alignment is unusable.', quality_reason='landmarks')
+        return FaceResult(Status.OK, bbox=bbox, landmarks=points[0], aligned=aligned, quality=quality)
     except VerificationError as exc:
-        return FaceResult(exc.status, str(exc))
+        return FaceResult(exc.status, str(exc), quality_reason=exc.quality_reason)
     except Exception:
         return FaceResult(Status.MODEL_ERROR, 'Detection or official alignment failed.')

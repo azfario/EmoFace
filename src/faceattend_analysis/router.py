@@ -1,5 +1,6 @@
 from fastapi import APIRouter,Request
 from faceattend_api.errors import APIError
+from face_verification.demo_quality import demo_face_bundle
 from faceattend_api.services.image_input import read_parts,decode
 from faceattend_enrollment.router import authorization,native_worker
 from faceattend_candidates.service import CandidateService
@@ -34,7 +35,7 @@ async def analyze_face(request:Request,include_candidates:bool=False,top_k:int=3
         part=next(p for p in parts if p.is_file)
         def work():
             try:
-                bundle=models.face()
+                bundle=demo_face_bundle(models.face())
                 expression=CropExpression(models.expression_service)
                 candidates=CandidateService(enrollment,settings) if enrollment is not None else None
                 return FaceAnalysis(expression,candidate_service=candidates).analyze(decode(part,request.app.state.settings),bundle,

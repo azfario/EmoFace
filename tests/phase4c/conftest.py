@@ -13,6 +13,7 @@ from faceattend_enrollment.dependencies import EnrollmentDependencies
 from faceattend_api.main import create_app
 from faceattend_candidates.config import CandidateSettings
 from faceattend_candidates.service import CandidateService
+from face_verification.demo_quality import demo_face_bundle
 
 class MemoryCatalog:
     def __init__(self,repository):self.repository=repository;self.snapshots=0;self.rechecks=0
@@ -27,7 +28,8 @@ def candidate_config_isolated(monkeypatch):
     monkeypatch.setenv('FACEATTEND_ENROLLMENT_ENABLED','false')
     monkeypatch.setenv('FACEATTEND_DB_TELEMETRY_ENABLED','false')
 
-def add_reference(gallery,vector=None,*,name='Fictional Adult',identity=None,model_id='synthetic_test_only',status='active',expires=None,locator=None):
+def add_reference(gallery,vector=None,*,name='Fictional Adult',identity=None,model_id=None,status='active',expires=None,locator=None):
+    model_id=model_id if model_id is not None else getattr(gallery,'demo_model_id','synthetic_test_only')
     now=datetime.now(timezone.utc)
     row=Record(identity or uuid4(),name,locator or uuid4().hex,now,PURPOSE,now,
         expires or now+timedelta(days=7),status,model_id)
@@ -41,6 +43,7 @@ def search(gallery):return CandidateService(gallery.service,catalog=MemoryCatalo
 
 @pytest.fixture
 def candidate_operator(context,gallery,monkeypatch):
+    gallery.demo_model_id=demo_face_bundle(context.bundle).model_id
     import faceattend_candidates.service as service_module
     monkeypatch.setattr(service_module,'Catalog',MemoryCatalog)
     auth=OperatorAuth(password_record(PASSWORD))

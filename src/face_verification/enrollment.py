@@ -28,10 +28,10 @@ def enroll_user(user_id, images, store, model_bundle, *, adult_consent=False, id
         if not config.min_enrollment_images <= len(images) <= config.max_enrollment_images:
             raise VerificationError(Status.INSUFFICIENT_DATA, 'Provide 3–5 distinct enrollment images.')
         vectors, hashes = [], []
-        for image in images:
+        for photo_number, image in enumerate(images, 1):
             face = detector(image, model_bundle)
             if face.status != Status.OK:
-                raise VerificationError(face.status, face.message)
+                raise VerificationError(face.status, face.message, quality_reason=face.quality_reason, photo_number=photo_number)
             digest = image_digest(image)
             if digest in hashes:
                 raise VerificationError(Status.DUPLICATE_IMAGE, 'Repeated enrollment frames are not independent samples.')
@@ -42,7 +42,7 @@ def enroll_user(user_id, images, store, model_bundle, *, adult_consent=False, id
             consent={'adult': True, 'identity_verification': True, 'recorded_at': datetime.now(timezone.utc).isoformat()})
         return EnrollmentResult(Status.OK, 'Encrypted enrollment created.', user_id, len(images))
     except VerificationError as exc:
-        return EnrollmentResult(exc.status, str(exc), user_id)
+        return EnrollmentResult(exc.status, str(exc), user_id, photo_number=exc.photo_number, quality_reason=exc.quality_reason)
     except (ValueError, TypeError):
         return EnrollmentResult(Status.MODEL_ERROR, 'Enrollment embeddings were invalid or inconsistent.', user_id)
 

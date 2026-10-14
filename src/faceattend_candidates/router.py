@@ -1,5 +1,6 @@
 from fastapi import APIRouter,Request
 from faceattend_api.errors import APIError
+from face_verification.demo_quality import demo_face_bundle
 from faceattend_api.services.image_input import read_parts,decode
 from faceattend_enrollment.router import authorization,native_worker
 from .errors import CandidateError
@@ -24,7 +25,7 @@ async def candidates(request:Request,top_k:int=3):
         image_part=next(p for p in parts if p.is_file)
         def work():
             try:
-                bundle=models.face()
+                bundle=demo_face_bundle(models.face())
                 image=decode(image_part,request.app.state.settings)
                 return CandidateService(enrollment,settings).search(image,bundle,top_k=top_k,
                     adult_consent=True,research_opt_in=True,search_opt_in=True)

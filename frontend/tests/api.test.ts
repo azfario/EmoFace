@@ -16,3 +16,15 @@ it('rejects unauthorized unexpected candidates',async()=>{const value=result();(
 it('refuses external API paths',async()=>{await expect(new API().request('https://external.invalid')).rejects.toThrow();});
 
 it('blurry expression requests explicitly opt in and refuse identity names on bypassed frames',async()=>{const value=result();(value.faces[0] as unknown as {input_quality:unknown}).input_quality={status:'BLUR_GATE_BYPASSED'};(value.faces[0].identity_diagnostic.possible_candidates as unknown[]).push({verified:false,identity_id:'fictional',display_name:'Fictional candidate'});const {api,fetch}=await authenticated(value);await expect(api.analyze(new Blob(),{expression:true,candidates:true,outline:false})).rejects.toThrow();expect(fetch.mock.calls.at(-1)![0]).toContain('allow_blurry_expression=true');expect(fetch.mock.calls.at(-1)![1].headers['x-faceattend-blur-opt-in']).toBe('1');});
+
+it.each(['resolution','face_size','clipping','landmarks','pose','blur','lighting'])('reports a numbered photo failure for the fixed %s reason',async reason=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response({status:'LOW_QUALITY_IMAGE',photo_number:4,quality_reason:reason,message:'private detail'},422)));
+  try{await new API().request('/api/v1/demo/enrollments');throw new Error('Expected rejection');}catch(error){
+    expect(error).toBeInstanceOf(PublicError);expect((error as PublicError).photoNumber).toBe(4);expect((error as Error).message).toMatch(/^Photo 4 .*Replace it\.$/);expect((error as Error).message).not.toContain('private detail');
+  }
+});
+it.each([{photo_number:0,quality_reason:'blur'},{photo_number:6,quality_reason:'blur'},{photo_number:'2',quality_reason:'blur'},
+  {photo_number:2,quality_reason:'private path'},{photo_number:2,quality_reason:'toString'},{photo_number:2,quality_reason:{private:'path'}},
+  {photo_number:2.5,quality_reason:'blur'}])('ignores malformed quality details: %j',async details=>{
+  const error=new PublicError('LOW_QUALITY_IMAGE',422,details);expect(error.photoNumber).toBeUndefined();expect(error.message).not.toMatch(/^Photo /);
+});

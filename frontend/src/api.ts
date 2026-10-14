@@ -28,7 +28,21 @@ const messages:Record<string,string>={
   ENROLLMENT_CLEANUP_PENDING:'Cleanup is pending. The record remains blocked; use the local recovery guide.',
   BLACK_FRAME_REJECTED:'The camera delivered a black frame. Check the selected camera source.',
 };
-export class PublicError extends Error {constructor(public code:string,public status=0){super(messages[code]??'The local request could not be completed. Check the service and try again.');}}
+const qualityMessages:Record<string,string>={
+  resolution:'has too little image detail',face_size:'has a face that is too small',
+  clipping:'cuts off too much of the face',landmarks:'does not show a usable face',
+  pose:'has too much head rotation',blur:'is too blurry',lighting:'is too dark or too bright',
+};
+export class PublicError extends Error {
+  readonly photoNumber?:number;
+  constructor(public code:string,public status=0,details?:{photo_number?:unknown;quality_reason?:unknown}){
+    const number=details?.photo_number,reason=details?.quality_reason;
+    const valid=code==='LOW_QUALITY_IMAGE'&&typeof number==='number'&&Number.isInteger(number)&&number>=1&&number<=5
+      &&typeof reason==='string'&&Object.hasOwn(qualityMessages,reason);
+    super(valid?`Photo ${number} ${qualityMessages[reason]}. Replace it.`:(messages[code]??'The local request could not be completed. Check the service and try again.'));
+    this.photoNumber=valid?number:undefined;
+  }
+}
 export class API {
   private csrf:string|null=null;
   private requests=new Set<AbortController>();
@@ -43,7 +57,7 @@ export class API {
     try{
       const response=await fetch(path,{...options,credentials:'same-origin',cache:'no-store',signal:controller.signal});
       const value=await response.json();
-      if(!response.ok){if(response.status===401){this.csrf=null;this.authLost();}throw new PublicError(typeof value.status==='string'?value.status:'REQUEST_FAILED',response.status);}
+      if(!response.ok){if(response.status===401){this.csrf=null;this.authLost();}throw new PublicError(typeof value.status==='string'?value.status:'REQUEST_FAILED',response.status,value);}
       return value as T;
     }catch(error){if(error instanceof PublicError||error instanceof DOMException&&error.name==='AbortError')throw error;throw new PublicError('API_UNAVAILABLE');}
     finally{clearTimeout(deadline);this.requests.delete(controller);signal?.removeEventListener('abort',abort);}

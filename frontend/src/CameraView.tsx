@@ -3,7 +3,7 @@ import {Camera} from './camera';
 import {FaceOverlay} from './FaceOverlay';
 import type {Analysis} from './types';
 
-export function ErrorNote({text}: {text: string}) { return text ? <div role="alert" className="notice error">{text}</div> : null; }
+export function ErrorNote({text, id}: {text: string; id?: string}) { return text ? <div id={id} role="alert" className="notice error">{text}</div> : null; }
 export function useBlobURL(blob: Blob | null) {
   const [url, setURL] = useState('');
   useEffect(() => {
@@ -54,7 +54,7 @@ export function CameraSelector({media, disabled = false}: {media: CameraState; d
     <option value="">Default camera</option>{media.devices.map((item, index) => <option key={item.deviceId} value={item.deviceId}>{item.label || `Camera ${index + 1}`}</option>)}
   </select></label>;
 }
-export function CameraPreview({media, result, onReady}: {media: CameraState; result?: Analysis | null; onReady?: () => void}) {
+export function CameraPreview({media, result, frameMessage = '', onReady}: {media: CameraState; result?: Analysis | null; frameMessage?: string; onReady?: () => void}) {
   useEffect(() => {
     const video = media.video.current;
     if (!video) return;
@@ -63,17 +63,23 @@ export function CameraPreview({media, result, onReady}: {media: CameraState; res
     return () => { video.srcObject = null; };
   }, [media.stream, media.video]);
   function ready() { if (media.stream && media.video.current?.srcObject === media.stream && media.video.current.readyState >= 2) onReady?.(); }
+  const frameStatus = frameMessage || (result?.face_count === 0 ? 'No face' : '');
   return <div className={media.stream ? 'preview live' : 'preview'}>
     <video ref={media.video} muted playsInline aria-label="Live camera feed" onLoadedData={ready} onPlaying={ready}/>
-    {!media.stream && <div className="camera-placeholder"><span className="camera-icon" aria-hidden="true">◎</span>{media.starting ? 'Opening camera…' : 'Camera off'}</div>}
+    {!media.stream && <div className="camera-placeholder"><svg className="camera-illustration" viewBox="0 0 180 130" fill="none" aria-hidden="true">
+      <path className="camera-brackets" d="M22 37V19h24m88 0h24v18M22 93v18h24m88 0h24V93"/>
+      <path className="camera-body" d="M49 42h23l8-12h25l8 12h18a8 8 0 0 1 8 8v42a8 8 0 0 1-8 8H49a8 8 0 0 1-8-8V50a8 8 0 0 1 8-8Z"/>
+      <circle className="camera-lens-ring" cx="90" cy="70" r="23"/><circle className="camera-lens" cx="90" cy="70" r="15"/>
+      <path className="camera-glint" d="M83 62a10 10 0 0 1 14 0"/><path className="camera-detail" d="M121 52h8M47 107h86"/>
+    </svg><span>{media.starting ? 'Opening camera…' : 'Camera off'}</span></div>}
     {media.stream && <span className="live-badge"><span className="dot ready"/>Live</span>}
-    {media.stream && result && result.face_count === 0 && <div role="status" className="frame-status">No face</div>}
+    {media.stream && frameStatus && <div role="status" className="frame-status">{frameStatus}</div>}
     {media.stream && <FaceOverlay result={result}/>}
   </div>;
 }
 export function CameraButtons({media, start, stop, disabled = false}: {media: CameraState; start?: () => void; stop?: () => void; disabled?: boolean}) {
   return <div className="button-row">
     <button type="button" className="button primary" disabled={disabled || !!media.stream || media.starting} onClick={start ?? (() => void media.camera.start(media.device || undefined))}>Start</button>
-    <button type="button" className="button" disabled={!media.stream && !media.starting} onClick={stop ?? (() => media.camera.stop())}>Stop</button>
+    <button type="button" className="button secondary" disabled={!media.stream && !media.starting} onClick={stop ?? (() => media.camera.stop())}>Stop</button>
   </div>;
 }

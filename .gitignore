@@ -63,3 +63,12 @@ scripts/write_results_readout.py
 
 # Preserve former phase dependency snapshots locally, not in the repository.
 requirements-phase*.txt
+
+# Explicitly supplied screenshots for the README app demo.
+!/assets/demo/enrollment-photos.png
+!/assets/demo/enrollment-saved.png
+!/assets/demo/scan-neutral.png
+!/assets/demo/scan-happy.png
+!/assets/demo/scan-surprise.png
+!/assets/demo/scan-angry.png
+!/assets/demo/scan-disgust.png

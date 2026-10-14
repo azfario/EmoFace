@@ -84,13 +84,13 @@ export function App() {
 
   return <div className="app-shell">
     <header className="app-header">
-      <a className="brand" href="#" onClick={event => { event.preventDefault(); navigate('scan'); }}><span className="brand-symbol">E</span>EmoFace</a>
+      <a className="brand" href="#" onClick={event => { event.preventDefault(); navigate('scan'); }}>EmoFace</a>
       <nav aria-label="Main tabs">
         <button className={page === 'scan' ? 'tab selected' : 'tab'} aria-current={page === 'scan' ? 'page' : undefined} onClick={() => navigate('scan')}>Scan</button>
         <button className={page === 'enroll' ? 'tab selected' : 'tab'} aria-current={page === 'enroll' ? 'page' : undefined} onClick={() => navigate('enroll')}>Enroll</button>
       </nav>
-      <div className="connection"><span className={signed ? 'dot ready' : 'dot'}/>{signed ? 'Connected' : 'Connecting'}{signed && !loginFree && <button className="text-button" onClick={() => void end()}>Sign out</button>}</div>
     </header>
+    <div className="system-strip"><span className="system-label">Local camera studio</span><div className="connection"><span className={signed ? 'dot ready' : 'dot'}/>{signed ? 'Connected' : 'Connecting'}{signed && !loginFree && <button className="text-button" onClick={() => void end()}>Sign out</button>}</div></div>
     <main>
       {status?.ui.fixture_mode && <div className="notice">Test data</div>}
       <ErrorNote text={error}/>

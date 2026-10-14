@@ -1,4 +1,5 @@
 from starlette.responses import JSONResponse
+from face_verification.schemas import QUALITY_REASONS
 
 ERRORS = {
     'INVALID_IMAGE': (400, 'Supply one valid JPEG or PNG image.'),
@@ -26,19 +27,25 @@ ERRORS = {
 }
 
 class APIError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, *, photo_number=None, quality_reason=None):
         self.code = code if code in ERRORS else 'INTERNAL_ERROR'
+        self.photo_number = photo_number if type(photo_number) is int and 1 <= photo_number <= 5 else None
+        self.quality_reason = quality_reason if quality_reason in QUALITY_REASONS else None
 
-def error_response(code):
+def error_response(code, *, photo_number=None, quality_reason=None):
     code = code if code in ERRORS else 'INTERNAL_ERROR'
     http, message = ERRORS[code]
-    return JSONResponse({'status': code, 'message': message}, status_code=http)
+    payload = {'status': code, 'message': message}
+    if (code == 'LOW_QUALITY_IMAGE' and type(photo_number) is int and 1 <= photo_number <= 5
+            and quality_reason in QUALITY_REASONS):
+        payload.update(photo_number=photo_number, quality_reason=quality_reason)
+    return JSONResponse(payload, status_code=http)
 
-def core_error(code):
+def core_error(code, *, photo_number=None, quality_reason=None):
     value = str(code)
     aliases = {'GPU_UNAVAILABLE': 'CUDA_UNAVAILABLE', 'MODEL_ERROR': 'MODEL_NOT_READY',
                'MODEL_MISMATCH': 'MODEL_NOT_READY', 'INSUFFICIENT_DATA': 'ENROLLMENT_FAILED',
                'KEY_UNAVAILABLE': 'STORAGE_ERROR', 'CORRUPT_TEMPLATE': 'STORAGE_ERROR',
                'TEMPLATE_EXPIRED': 'STORAGE_ERROR', 'DUPLICATE_ID': 'ENROLLMENT_FAILED'}
-    return APIError(aliases.get(value, value))
+    return APIError(aliases.get(value, value), photo_number=photo_number, quality_reason=quality_reason)
 

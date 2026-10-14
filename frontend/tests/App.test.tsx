@@ -41,6 +41,23 @@ function ready() {
 async function enrollment() { await connected(); await userEvent.click(screen.getByRole('button', {name: 'Enroll'})); await screen.findByText('Saved names'); }
 const files = (count: number) => Array.from({length: count}, (_, i) => new File(['fictional photo ' + i], 'private-name-' + i + '.png', {type: 'image/png'}));
 
+it('highlights a failed reference, retains inputs, and clears the error when replacing it', async () => {
+  const {fetch} = mock(); const original = fetch.getMockImplementation()!; let saves = 0;
+  fetch.mockImplementation(async (path, options = {}) => path.endsWith('/enrollments') && options.method === 'POST' && ++saves === 1
+    ? response({status: 'LOW_QUALITY_IMAGE', photo_number: 2, quality_reason: 'blur', message: 'private detail'}, 422) : original(path, options));
+  render(<App/>); await enrollment(); await userEvent.type(screen.getByLabelText('Name'), 'Alex');
+  await userEvent.upload(screen.getByLabelText('Upload reference photos'), files(3)); await userEvent.click(screen.getByRole('button', {name: 'Save'}));
+  await screen.findByText('Photo 2 is too blurry. Replace it.');
+  expect(screen.getByAltText('Reference 2').parentElement?.classList.contains('rejected')).toBe(true);
+  expect(screen.getByAltText('Reference 2').parentElement?.getAttribute('aria-describedby')).toBe('enrollment-error');
+  expect(screen.getAllByAltText(/Reference /)).toHaveLength(3); expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Alex');
+  expect(screen.getByAltText('Reference 1').parentElement?.classList.contains('rejected')).toBe(false);
+  await userEvent.click(screen.getByRole('button', {name: 'Remove reference 2'}));
+  expect(screen.queryByRole('alert')).toBeNull(); expect(screen.queryByText('Replace')).toBeNull();
+  await userEvent.upload(screen.getByLabelText('Upload reference photos'), files(1)); await userEvent.click(screen.getByRole('button', {name: 'Save'}));
+  await screen.findByText('Saved.'); expect(screen.queryByAltText('Reference 1')).toBeNull();
+});
+
 it('opens on Scan with two tabs, no checkboxes, and no camera or browser storage access', async () => {
   const {getUserMedia} = mock(); const storage = vi.spyOn(Storage.prototype, 'setItem'); render(<App/>); await connected();
   expect(screen.getByRole('heading', {name: 'Scan'})).toBeTruthy(); expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(2);
@@ -72,9 +89,28 @@ it('no-face frames clear the previous name and emotion while scanning continues'
   let calls = 0; mock({analyze: async () => response(++calls === 1 ? prediction() : {face_count: 0, face_detected: false, verified: false, threshold: null, faces: []})});
   render(<App/>); await connected(); await start(); fireEvent.loadedData(ready()); await screen.findByText('No face'); expect(screen.queryByText('Emotion: happy')).toBeNull(); expect(screen.getByText('Live')).toBeTruthy();
 });
-it('processing errors stop the camera and enable Start', async () => {
-  const {stop} = mock({analyze: async () => response({status: 'MULTIPLE_FACES'}, 422)}); render(<App/>); await connected(); await start(); fireEvent.loadedData(ready());
+it('service errors stop the camera and enable Start', async () => {
+  const {stop} = mock({analyze: async () => response({status: 'CUDA_UNAVAILABLE'}, 503)}); render(<App/>); await connected(); await start(); fireEvent.loadedData(ready());
   await screen.findByRole('alert'); expect(stop).toHaveBeenCalledOnce(); expect((screen.getByRole('button', {name: 'Start'}) as HTMLButtonElement).disabled).toBe(false); expect(screen.queryByText('Live')).toBeNull();
+});
+it.each([
+  ['NO_FACE', 'No face'], ['LOW_QUALITY_IMAGE', 'No clear face'], ['MULTIPLE_FACES', 'One face at a time'],
+  ['BLACK_FRAME_REJECTED', 'Waiting for camera image'], ['INVALID_EXPRESSION_CROP', 'No clear face'],
+])('keeps the camera live and continues analyzing after %s', async (code, message) => {
+  const {stop, fetch, getUserMedia} = mock({analyze: async () => response({status: code}, code === 'BLACK_FRAME_REJECTED' ? 400 : 422)});
+  render(<App/>); await connected(); await start(); fireEvent.loadedData(ready()); await screen.findByText(message);
+  await waitFor(() => expect(fetch.mock.calls.filter(([path]) => path.includes('analyze-face')).length).toBeGreaterThanOrEqual(2));
+  expect(stop).not.toHaveBeenCalled(); expect(getUserMedia).toHaveBeenCalledOnce(); expect(screen.getByText('Live')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull(); expect((screen.getByRole('button', {name: 'Stop'}) as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.click(screen.getByRole('button', {name: 'Stop'})); expect(stop).toHaveBeenCalledOnce(); expect(screen.queryByText(message)).toBeNull();
+});
+it('clears stale predictions on a rejected frame and recovers without reopening the camera', async () => {
+  let calls = 0, resume = false;
+  const {stop, getUserMedia} = mock({analyze: async () => response(++calls === 1 || resume ? prediction() : {status: 'LOW_QUALITY_IMAGE'}, calls === 1 || resume ? 200 : 422)});
+  render(<App/>); await connected(); await start(); fireEvent.loadedData(ready()); await screen.findByText('Emotion: happy');
+  await screen.findByText('No clear face'); expect(screen.queryByText('Emotion: happy')).toBeNull(); expect(screen.queryByRole('img', {name: 'Face predictions'})).toBeNull();
+  resume = true; await screen.findByText('Emotion: happy'); expect(screen.queryByText('No clear face')).toBeNull();
+  expect(stop).not.toHaveBeenCalled(); expect(getUserMedia).toHaveBeenCalledOnce(); await userEvent.click(screen.getByRole('button', {name: 'Stop'}));
 });
 it('permission denial gives a retry message without analyzing', async () => {
   const {getUserMedia, fetch} = mock(); getUserMedia.mockRejectedValue(new DOMException('private message', 'NotAllowedError')); render(<App/>); await connected(); await userEvent.click(screen.getByRole('button', {name: 'Start'}));

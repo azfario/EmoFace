@@ -6,6 +6,31 @@
 
 This project explores how daily school check-ins could support early awareness of students' emotional wellbeing and encourage timely intervention. Facial-expression predictions are intended as supportive indicators, not as a means of diagnosing depression or determining a student's actual emotional state.
 
+## App Demo
+
+Enroll reference photos, then scan a live camera feed for a possible name match and facial-expression prediction.
+
+| Reference photos | Enrollment saved |
+|---|---|
+| <img src="assets/demo/enrollment-photos.png" alt="Enrollment form with five reference photos ready to save" width="400"> | <img src="assets/demo/enrollment-saved.png" alt="Successful enrollment with saved names and a confirmation message" width="400"> |
+
+**Live scan — happy prediction**
+
+![Live camera feed showing a possible name match and a happy expression prediction](assets/demo/scan-happy.png)
+
+<details>
+<summary>More live scan examples</summary>
+
+| Neutral prediction | Surprise prediction |
+|---|---|
+| <img src="assets/demo/scan-neutral.png" alt="Live camera feed with a possible name match and a neutral expression prediction" width="400"> | <img src="assets/demo/scan-surprise.png" alt="Live camera feed with a possible name match and a surprise expression prediction" width="400"> |
+
+| Angry prediction | Disgust prediction |
+|---|---|
+| <img src="assets/demo/scan-angry.png" alt="Live camera feed with a possible name match and an angry expression prediction" width="400"> | <img src="assets/demo/scan-disgust.png" alt="Live camera feed with a possible name match and a disgust expression prediction" width="400"> |
+
+</details>
+
 ## Quick start (Windows + Docker)
 
 Run the app with Docker; Python, Node.js and PostgreSQL are supplied inside the containers.
@@ -113,9 +138,10 @@ Runtime behavior:
 
 - The interface has two tabs, **Scan** and **Enroll**, and opens on Scan without activating the camera. Start authorizes the local adult scan. The live face box shows `Possible: <name>` (or `Name: Unknown`) and `Emotion: <category>`.
 - Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
-- Start combines expression prediction, candidate matching and face outlines. Blurry frames show a compact warning and skip identity matching; enrollment retains its original quality gates. Names remain possible matches and expressions remain predictions.
+- Start combines expression prediction, candidate matching and face outlines. Enrollment and live name matching use the shared `demo-everyday-v1` profile: image side ≥128px, face side ≥48px, blur variance ≥20, brightness 20–240, eye spacing ≥8% of face width, and up to 10% box overflow/landmark padding with landmarks inside the image. Accepted boxes are clamped before cropping and drawing. Frames below the demo blur limit can still produce expressions but skip identity matching. Standalone verification/calibration retains its strict profile. Names remain possible matches and expressions remain predictions.
+- Every submitted reference must pass; duplicate images, inconsistent references and multiple faces are rejected. A quality refusal identifies the photo number and reason, keeps the selected photos, and highlights the thumbnail to replace. Earlier policy fingerprints require explicit re-enrollment before matching; existing records and encrypted references are retained.
 - The app opens without a login. All local users can manage saved enrollments; temporary browser sessions still enforce CSRF protection and request limits.
-- Stop, tab switching, hidden tabs, session expiry and camera revocation release capture and clear scan results. Scans stop after five minutes or a processing failure. Images and prediction results remain transient; the application records no video or individual expression history.
+- Stop, tab switching, hidden tabs, session expiry and camera revocation release capture and clear scan results. Empty frames and frame-level face-quality, multiple-face, black-frame or crop rejections clear predictions and keep the live camera scanning; labels resume when a usable face returns. Scans stop after five minutes or a service/capture failure. Images and prediction results remain transient; the application records no video or individual expression history.
 
 ## Model development and results
 
