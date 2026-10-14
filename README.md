@@ -32,7 +32,7 @@ Open Docker Desktop and wait for its engine to be running, then run:
 
 The launcher verifies the bundled model hashes, prepares missing runtime copies, builds the containers, checks CUDA model inference, creates or reuses protected secrets, sets up PostgreSQL and waits for healthy services. First use downloads dependencies and builds large CUDA images; allow sufficient disk space and time. It opens [http://127.0.0.1:18080/app/](http://127.0.0.1:18080/app/) when ready. **No login or password prompt is required.**
 
-Choose your camera, click **Start camera**, and confirm adult consent to enable analysis. Saved enrollments are available to anyone who can access the app on this PC.
+The app opens on **Scan**. Choose a camera and click **Start** to show a possible name match and emotion prediction directly on the live feed; **Stop** releases the camera. In **Enroll**, enter a name, capture or upload 3–5 photos, and click **Save**. Start and Save confirm the permissions described beside those buttons; no consent checkboxes are required. Saved enrollments are available to anyone who can access the app on this PC.
 
 To stop while keeping your data and secrets:
 
@@ -111,11 +111,11 @@ Key data flows:
 
 Runtime behavior:
 
-- Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
+- The interface has two tabs, **Scan** and **Enroll**, and opens on Scan without activating the camera. Start authorizes the local adult scan. The live face box shows `Possible: <name>` (or `Name: Unknown`) and `Emotion: <category>`.
 - Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
-- Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
+- Start combines expression prediction, candidate matching and face outlines. Blurry frames show a compact warning and skip identity matching; enrollment retains its original quality gates. Names remain possible matches and expressions remain predictions.
 - The app opens without a login. All local users can manage saved enrollments; temporary browser sessions still enforce CSRF protection and request limits.
-- Stop camera, Clear workspace, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
+- Stop, tab switching, hidden tabs, session expiry and camera revocation release capture and clear scan results. Scans stop after five minutes or a processing failure. Images and prediction results remain transient; the application records no video or individual expression history.
 
 ## Model development and results
 
@@ -264,7 +264,7 @@ $env:FACEATTEND_DB_TELEMETRY_ENABLED = 'false'
 .\.venv\Scripts\python.exe scripts\phase3_serve.py
 ```
 
-Open `http://127.0.0.1:8000/app/`, select a camera and confirm adult consent. Login is disabled by default when enrollment is enabled. Optional password mode uses `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` and the configured operator record. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
+Open `http://127.0.0.1:8000/app/`, select a camera on Scan and click Start. Login is disabled by default when enrollment is enabled. Optional password mode uses `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` and the configured operator record. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
 
 Run source-checkout checks:
 
@@ -347,7 +347,7 @@ docker compose up -d --wait --wait-timeout 180
 
 The GPU check runs the mounted saved models on synthetic tensors and requires exclusive CUDA computation. Stop if it fails; do not substitute a CPU service. One-shot migrations use the owner credential; the API receives only the restricted runtime database password, operator record and encryption key. Keep all five generated secret files outside the checkout and OneDrive, under their protected ACL. No default production password is supplied. `--qa` creates a separately scoped fictional test fixture only; it is not an operator setup shortcut.
 
-Open `http://127.0.0.1:18080/app/`; no login is required. Start the camera yourself and confirm adult consent; the existing automatic expression/outline workflow then operates as before. The container tests do not request camera permission. Enrollment requires 3–5 distinct acceptable images and encrypted-reference consent. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
+Open `http://127.0.0.1:18080/app/`; no login is required. Scan uses Start and Stop, with possible names and emotion predictions over the live feed. Enroll uses manual capture or uploads, a name, and Save. Start confirms adult participation; Save authorizes encrypted-reference storage for the existing 30-day default. The container tests do not request camera permission. Enrollment still requires 3–5 distinct acceptable images. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
 
 To stop, preserve data and restart later:
 

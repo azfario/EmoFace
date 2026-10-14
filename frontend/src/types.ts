@@ -1,4 +1,4 @@
-export type Page='overview'|'enrollments'|'camera'|'privacy';
+export type Page='scan'|'enroll';
 export type Enrollment={identity_id:string;display_name:string;status:string;expires_at:string;consent_recorded_at:string;verified:false;threshold:null};
 export type Candidate={identity_id:string;display_name:string;label:string;cosine_similarity:number;verified:false};
 export type Identity={identity_status:string;candidate_count:number;possible_candidates:Candidate[];verified:false;threshold:null;reason:string};

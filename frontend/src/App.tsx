@@ -1,140 +1,107 @@
-import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {API,PublicError} from './api';
-import {Camera,BoundedAnalysis,capture} from './camera';
-import {useModal} from './modal';
-import {FaceOverlay} from './FaceOverlay';
-import type {Analysis,AnalysisOptions,Enrollment,Page,UIStatus,ModelInfo} from './types';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {API} from './api';
+import {Scan} from './Scan';
+import {Enrollments} from './Enrollments';
+import {ErrorNote} from './CameraView';
+import type {Page, ModelInfo, UIStatus} from './types';
 
-function Icon({name,size=20}:{name:string;size?:number}){const paths:Record<string,React.ReactNode>={
-  home:<><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></>,
-  people:<><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4v3"/></>,
-  camera:<><path d="M8 5 9 3h6l1 2h5v15H3V5Z"/><circle cx="12" cy="12" r="4"/></>,
-  shield:<><path d="m12 2 9 4v6c0 6-9 10-9 10S3 18 3 12V6Z"/><path d="m8 12 3 3 5-6"/></>,
-  arrow:<><path d="M4 12h16m-6-6 6 6-6 6"/></>,
-  chip:<><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v5m6-5v5M9 18v5m6-5v5M1 9h5m-5 6h5m12-6h5m-5 6h5"/></>,
-  lock:<><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></>,
-  plus:<path d="M12 4v16M4 12h16"/>,
-  close:<path d="m6 6 12 12M6 18 18 6"/>,
-  upload:<><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></>,
-  stop:<rect x="6" y="6" width="12" height="12" rx="2"/>,
-  check:<path d="m4 12 5 5L20 6"/>,
-};return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]??paths.shield}</svg>;}
-function Brand(){return <div className="brand"><span className="brand-mark"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M10 3H3v7m19-7h7v7M3 22v7h7m19-7v7h-7" stroke="currentColor" strokeWidth="2"/><ellipse cx="16" cy="15" rx="6" ry="8" stroke="currentColor" strokeWidth="1.5"/><path d="M13 18q3 3 6 0" stroke="currentColor"/></svg></span><span>FaceAttend<small>LOCAL RESEARCH WORKSPACE</small></span></div>;}
-function Consent({checked,onChange,children}:{checked:boolean;onChange:(value:boolean)=>void;children:React.ReactNode}){return <label className="check"><input type="checkbox" checked={checked} onChange={event=>onChange(event.target.checked)}/><span>{children}</span></label>;}
-function ErrorNote({text}:{text:string}){return text?<div role="alert" className="notice error">{text}</div>:null;}
-function useBlobURL(blob:Blob|null){const [url,setURL]=useState('');useEffect(()=>{if(!blob){setURL('');return;}const value=URL.createObjectURL(blob);setURL(value);return()=>URL.revokeObjectURL(value);},[blob]);return url;}
+export function App() {
+  const [page, setPage] = useState<Page>('scan');
+  const [status, setStatus] = useState<{models: ModelInfo; ui: UIStatus} | null>(null);
+  const [signed, setSigned] = useState(false);
+  const [visible, setVisible] = useState(document.visibilityState !== 'hidden');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [ending, setEnding] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const alive = useRef(true);
+  const resetRef = useRef<() => void>(() => {});
+  const [api] = useState(() => new API(() => resetRef.current()));
+  const loginFree = status?.ui.login_required === false;
 
-export function App(){
-  const [page,setPage]=useState<Page>('overview'),[signed,setSigned]=useState(false),[loginOpen,setLoginOpen]=useState(false),[password,setPassword]=useState(''),[loginError,setLoginError]=useState(''),[loginBusy,setLoginBusy]=useState(false);
-  const [status,setStatus]=useState<{models:ModelInfo;ui:UIStatus}|null>(null),[statusError,setStatusError]=useState(''),[notice,setNotice]=useState('');
-  const loginFree=status?.ui.login_required===false;
-  const [visible,setVisible]=useState(document.visibilityState!=='hidden'),[connectError,setConnectError]=useState(''),[connectRetry,setConnectRetry]=useState(0),[clearing,setClearing]=useState(false);
-  const endRef=useRef<()=>void>(()=>{});const [api]=useState(()=>new API(()=>endRef.current()));const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
-  const reset=useCallback(()=>{api.clear();setSigned(false);setPassword('');setLoginOpen(false);setPage('overview');setNotice(loginFree?'Workspace cleared. Camera and temporary inputs were released.':'Your private session ended. Sign in to continue.');if(timer.current)clearTimeout(timer.current);},[api,loginFree]);endRef.current=reset;
-  const end=useCallback(async()=>{setClearing(true);const ending=api.logout();reset();try{await ending;}catch{}finally{setClearing(false);}},[api,reset]);
-  const refresh=useCallback(async()=>{try{setStatus(await api.status());setStatusError('');}catch{setStatusError('Local service status is unavailable. Check that the API is running.');}},[api]);
-  useEffect(()=>{void refresh();return()=>{api.clear();if(timer.current)clearTimeout(timer.current);};},[api,refresh]);
-  useEffect(()=>{const hidden=()=>{const showing=document.visibilityState!=='hidden';setVisible(showing);if(!showing){if(signed)void end();else api.abort();setPassword('');setLoginOpen(false);}};document.addEventListener('visibilitychange',hidden);return()=>document.removeEventListener('visibilitychange',hidden);},[signed,end,api]);
-  useEffect(()=>{
-    if(!loginFree||signed||!visible||clearing)return;
-    let active=true;setConnectError('');
-    void api.open().then(seconds=>{if(!active)return;setSigned(true);timer.current=setTimeout(()=>void end(),seconds*1000);}).catch(error=>{if(active)setConnectError(error instanceof Error?error.message:'Local connection failed.');});
-    return()=>{active=false;};
-  },[api,end,loginFree,signed,visible,connectRetry,clearing]);
-  async function login(event:React.FormEvent){event.preventDefault();const value=password;setPassword('');setLoginBusy(true);setLoginError('');try{const seconds=await api.login(value);setSigned(true);setLoginOpen(false);setNotice('');timer.current=setTimeout(()=>void end(),seconds*1000);}catch(error){setLoginError(error instanceof Error?error.message:'Sign-in failed.');}finally{setLoginBusy(false);}}
-  const loginDialog=useModal(loginOpen,()=>{api.abort();setLoginOpen(false);setPassword('');});
-  function navigate(next:Page){if(signed)api.abort();setPage(next);setNotice('');}
-  const names:Record<Page,string>={overview:'Overview',enrollments:'Enrollments',camera:'Research camera',privacy:'Privacy & limits'};
-  return <div className="shell"><aside className="sidebar"><Brand/><div className="nav-label">WORKSPACE</div><nav aria-label="Workspace">{(['overview','enrollments','camera','privacy'] as Page[]).map((item,index)=><button key={item} className={page===item?'nav-item selected':'nav-item'} aria-current={page===item?'page':undefined} onClick={()=>navigate(item)}><Icon name={['home','people','camera','shield'][index]}/>{names[item]}{page===item&&<span className="nav-dot"/>}</button>)}</nav><div className="sidebar-note"><Icon name="shield"/><strong>Built for careful exploration.</strong><p>Local processing.<br/>Voluntary adult participation.<br/>Unverified identity matches.</p><button className="text-button" onClick={()=>navigate('privacy')}>Understand the limits <Icon name="arrow" size={16}/></button></div><div className="sidebar-foot"><span className="dot"/> Runs on this device</div></aside>
-    <div className="workspace"><header><div className="breadcrumb">Workspace <span>/</span> <strong>{names[page]}</strong></div><div className="header-actions"><span className="pill">Research only</span>{signed?<button className="session-button" onClick={()=>void end()}><span className="dot"/> {loginFree?'Clear workspace':'End session'}</button>:(loginFree||!status)?<span className="pill">Connecting locally</span>:<button className="button dark small" onClick={()=>{setLoginError('');setLoginOpen(true);}}><Icon name="lock" size={15}/> Operator sign in</button>}</div></header>
-      <main>{status?.ui.fixture_mode&&<div className="notice fixture">Fictional UI test fixture — model and participant data are simulated.</div>}{notice&&<div role="status" className="notice">{notice}</div>}
-        {page==='overview'&&<Overview status={status} error={statusError} refresh={refresh} go={navigate}/>}
-        {page==='privacy'&&<Privacy/>}
-        {(page==='enrollments'||page==='camera')&&!signed&&((loginFree||!status)?<div className="panel"><h1>Connecting to your local workspace.</h1><ErrorNote text={connectError}/>{connectError&&<button className="button dark" onClick={()=>setConnectRetry(value=>value+1)}>Retry connection</button>}</div>:<div className="locked panel"><span className="icon-tile"><Icon name="lock" size={28}/></span><p className="eyebrow">PRIVATE OPERATOR WORKSPACE</p><h1>Begin with permission.</h1><p>Sign in to manage encrypted adult references or analyze a voluntarily supplied frame.</p><button className="button dark" onClick={()=>setLoginOpen(true)}>Operator sign in <Icon name="arrow"/></button><p className="small-muted">Your password and session token are never saved in browser storage.</p></div>)}
-        {page==='enrollments'&&signed&&<Enrollments api={api} onEnd={reset} loginFree={loginFree}/>}
-        {page==='camera'&&signed&&<Research api={api} status={status?.ui}/>}
-      </main><footer>FaceAttend <span>·</span> A local research prototype <span>·</span> No automated attendance or emotional-state decisions.</footer></div>
-    {loginOpen&&<div className="modal-backdrop"><section ref={loginDialog} className="modal" role="dialog" aria-modal="true" aria-labelledby="login-title"><button className="icon-button modal-close" aria-label="Close sign-in" onClick={()=>{api.abort();setLoginOpen(false);setPassword('');}}><Icon name="close"/></button><span className="icon-tile"><Icon name="lock" size={25}/></span><p className="eyebrow">LOCAL OPERATOR</p><h2 id="login-title">A private workspace.</h2><p>Use your locally configured operator password. The session ends after 15 minutes, or when this tab is hidden.</p><form onSubmit={event=>void login(event)}><label className="field">Operator password<input type="password" autoComplete="off" maxLength={256} value={password} onChange={event=>setPassword(event.target.value)} required/></label><ErrorNote text={loginError}/><button className="button dark full" disabled={loginBusy||!password}>{loginBusy?'Signing in…':'Sign in'}</button></form><p className="small-muted">First use? Follow the local operator setup guide. This page never creates or resets credentials.</p></section></div>}
+  const reset = useCallback(() => {
+    api.clear();
+    if (timer.current) clearTimeout(timer.current);
+    if (!alive.current) return;
+    setSigned(false); setPassword(''); setPage('scan');
+  }, [api]);
+  resetRef.current = reset;
+  const end = useCallback(async () => {
+    setEnding(true);
+    const pending = api.logout();
+    reset();
+    try { await pending; }
+    catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : 'Sign out failed.'); }
+    finally { if (alive.current) setEnding(false); }
+  }, [api, reset]);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; api.clear(); if (timer.current) clearTimeout(timer.current); };
+  }, [api]);
+  useEffect(() => {
+    let current = true;
+    void api.status().then(value => { if (current) { setStatus(value); setError(''); } })
+      .catch(() => { if (current) setError('Service unavailable.'); });
+    return () => { current = false; };
+  }, [api, retry]);
+  useEffect(() => {
+    const hidden = () => {
+      const showing = document.visibilityState !== 'hidden';
+      setVisible(showing);
+      if (!showing) { setPassword(''); if (signed) void end(); else api.abort(); }
+    };
+    document.addEventListener('visibilitychange', hidden);
+    return () => document.removeEventListener('visibilitychange', hidden);
+  }, [api, end, signed]);
+  useEffect(() => {
+    if (!loginFree || signed || !visible || ending) return;
+    let current = true;
+    setError('');
+    void api.open().then(seconds => {
+      if (!current) return;
+      setSigned(true);
+      timer.current = setTimeout(() => void end(), seconds * 1000);
+    }).catch(caught => { if (current) setError(caught instanceof Error ? caught.message : 'Connection failed.'); });
+    return () => { current = false; };
+  }, [api, end, loginFree, signed, visible, ending, retry]);
+
+  async function login(event: React.FormEvent) {
+    event.preventDefault();
+    const value = password;
+    setPassword(''); setBusy(true); setError('');
+    try {
+      const seconds = await api.login(value);
+      if (!alive.current || document.visibilityState === 'hidden') { api.clear(); return; }
+      setSigned(true);
+      timer.current = setTimeout(() => void end(), seconds * 1000);
+    } catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : 'Sign in failed.'); }
+    finally { if (alive.current) setBusy(false); }
+  }
+  function navigate(next: Page) { if (next !== page) { api.abort(); setPage(next); } }
+
+  return <div className="app-shell">
+    <header className="app-header">
+      <a className="brand" href="#" onClick={event => { event.preventDefault(); navigate('scan'); }}><span className="brand-symbol">E</span>EmoFace</a>
+      <nav aria-label="Main tabs">
+        <button className={page === 'scan' ? 'tab selected' : 'tab'} aria-current={page === 'scan' ? 'page' : undefined} onClick={() => navigate('scan')}>Scan</button>
+        <button className={page === 'enroll' ? 'tab selected' : 'tab'} aria-current={page === 'enroll' ? 'page' : undefined} onClick={() => navigate('enroll')}>Enroll</button>
+      </nav>
+      <div className="connection"><span className={signed ? 'dot ready' : 'dot'}/>{signed ? 'Connected' : 'Connecting'}{signed && !loginFree && <button className="text-button" onClick={() => void end()}>Sign out</button>}</div>
+    </header>
+    <main>
+      {status?.ui.fixture_mode && <div className="notice">Test data</div>}
+      <ErrorNote text={error}/>
+      {error && <button className="button" onClick={() => setRetry(value => value + 1)}>Retry</button>}
+      {!signed && status && !loginFree && <form className="panel login" onSubmit={event => void login(event)}>
+        <h1>Sign in</h1><label className="field">Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} maxLength={256} autoComplete="off" required/></label>
+        <button className="button primary" disabled={busy || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      </form>}
+      {!signed && (!status || loginFree) && !error && <div className="empty">Connecting…</div>}
+      {signed && page === 'scan' && <Scan api={api} status={status!}/>}
+      {signed && page === 'enroll' && <Enrollments api={api}/>}
+    </main>
   </div>;
-}
-
-function Overview({status,error,refresh,go}:{status:{models:ModelInfo;ui:UIStatus}|null;error:string;refresh:()=>Promise<void>;go:(page:Page)=>void}){
-  const faceReady=status?.models.model_readiness.face==='ready',expressionReady=status?.models.model_readiness.expression==='ready';
-  const cards=[{icon:'chip',name:'Face models',value:faceReady?'CUDA ready':'Not ready',detail:status?.models.gpu_device??'GPU required · no CPU fallback',good:faceReady},
-    {icon:'lock',name:'Enrollment database',value:status?.ui.registration_database??'Checking…',detail:'Encrypted references · adult consent',good:status?.ui.registration_database==='ready'},
-    {icon:'camera',name:'Visible expression',value:expressionReady?'Model ready':'Not ready',detail:status?.ui.analysis_enabled?'Opt-in analysis available':'Analysis is disabled',good:expressionReady},
-    {icon:'shield',name:'Anonymous telemetry',value:status?.ui.telemetry_enabled?'Enabled':'Off by default',detail:status?.ui.anonymous_totals?`${status.ui.anonymous_totals.requests} coarse requests today`:'No individual prediction history',good:!status?.ui.telemetry_enabled}];
-  return <><div className="page-heading"><div><p className="eyebrow">A LITTLE CONTEXT GOES A LONG WAY</p><h1>Your local research workspace.</h1><p>Explore faces and visible expressions, with clear limits at every step.</p></div><button className="button quiet" onClick={()=>void refresh()}>Refresh status</button></div><ErrorNote text={error}/>
-    <section className="hero"><div><span className="hero-label"><span className="dot"/> ON YOUR DEVICE. BY YOUR CHOICE.</span><h2>A face is a<br/>starting point.</h2><p>Enroll consenting adults. Capture a frame yourself. See possible matches and expression predictions — with uncertainty kept in view.</p><div className="button-row"><button className="button dark" onClick={()=>go('camera')}>Open research camera <Icon name="arrow"/></button><button className="button light" onClick={()=>go('enrollments')}>Manage enrollments</button></div></div><div className="hero-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><svg viewBox="0 0 240 250"><path d="M44 76V40h36m80 0h36v36M44 177v36h36m80 0h36v-36" fill="none" stroke="currentColor" strokeWidth="2"/><ellipse cx="120" cy="119" rx="46" ry="61" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M88 99q12-8 24 0m17 0q12-8 24 0m-33 3v29h-9m-9 17q18 14 36 0" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M58 225q62-58 124 0" fill="none" stroke="currentColor" strokeWidth="1.3"/></svg><div className="art-note">A prediction.<br/><strong>Always in context.</strong></div></div></section>
-    <div className="status-grid">{cards.map(card=><section className="status-card" key={card.name}><div className="card-top"><Icon name={card.icon}/><span className={card.good?'dot':'dot muted'}/></div><h3>{card.name}</h3><strong>{card.value}</strong><p>{card.detail}</p></section>)}</div>
-    <div className="overview-bottom"><section className="panel"><div className="section-heading"><h2>A deliberate workflow</h2><span className="pill">Three small steps</span></div>{[{title:'Enroll with permission',text:'Three to five clear, distinct photos. An encrypted reference with an expiry.'},{title:'Choose what to analyze',text:'Start the camera yourself, or upload a single-person photo. Opt in to each prediction.'},{title:'Read possibilities, not verdicts',text:'Names stay unverified. Expression scores are not probabilities or proof of feelings.'}].map((step,index)=><div className="workflow-step" key={step.title}><span>{String(index+1).padStart(2,'0')}</span><div><h3>{step.title}</h3><p>{step.text}</p></div></div>)}</section><section className="context-card"><span className="icon-tile"><Icon name="shield"/></span><p className="eyebrow">WHAT A SCORE MEANS</p><h2>Similarity is not identity.<br/>Expression is not mood.</h2><p>A model score of 0.95 does not prove a 95% chance of being correct. These diagnostics are uncalibrated.</p><button className="text-button" onClick={()=>go('privacy')}>Read the limitations <Icon name="arrow" size={16}/></button></section></div>
-  </>;
-}
-
-function Privacy(){return <><div className="page-heading"><div><p className="eyebrow">YOUR CHOICE, YOUR CONTROL</p><h1>Privacy & clear limits.</h1><p>Understand what stays local, what is retained, and what a prediction cannot tell you.</p></div></div><div className="privacy-grid">{[
-  ['You initiate every capture','The camera starts only when you choose Start camera. No microphone or recording is requested. Stop, navigation, hidden tabs, camera revocation and session end release the tracks.'],
-  ['Photos are temporary','Uploads and captured frames stay in memory for processing. This interface saves no photo or prediction history, uses no browser storage or analytics, and clears private state when a session ends.'],
-  ['References have a lifecycle','With explicit adult consent, an encrypted biometric reference and minimal chosen-name metadata are retained locally for 1–30 days. You can revoke, delete or re-enroll. Originals, OS caches and external backups are outside this page’s cleanup control.'],
-  ['Possibilities stay unverified','Face detection works, but no identity acceptance cutoff is validated. An unenrolled subject can still receive candidate names. Neither a high similarity nor rank one proves identity.'],
-  ['Expression is a prediction','The model predicts a visible-expression category, not someone’s actual emotional state, mood or diagnosis. Softmax scores are uncalibrated, and accuracy on these camera crops has not been measured.'],
-  ['A small research prototype','Exactly one consenting adult face is supported. This is not a liveness system, clinical tool, school deployment or attendance recorder. The original dataset accuracy does not establish webcam accuracy.']
-].map(([title,text])=><section className="panel" key={title}><span className="icon-tile"><Icon name="shield"/></span><h2>{title}</h2><p>{text}</p></section>)}</div></>;}
-
-function CameraView({camera,stream,error,video,devices,device,setDevice,refresh,result,onReady}:{camera:Camera;stream:MediaStream|null;error:string;video:React.RefObject<HTMLVideoElement|null>;devices:MediaDeviceInfo[];device:string;setDevice:(id:string)=>void;refresh:()=>Promise<void>;result?:Analysis|null;onReady?:()=>void}){
-  useEffect(()=>{if(video.current){video.current.srcObject=stream;if(stream)void video.current.play().catch(()=>{});}},[stream,video]);
-  const box=result?.faces[0]?.face_box;
-  const ready=()=>{if(stream&&video.current?.srcObject===stream&&video.current.readyState>=2)onReady?.();};
-  return <><div className="camera-toolbar"><label>Camera source<select aria-label="Camera source" value={device} disabled={!!stream||camera.starting} onChange={event=>setDevice(event.target.value)}><option value="">Default / front camera</option>{devices.map((item,index)=><option value={item.deviceId} key={item.deviceId}>{item.label||`Camera ${index+1}`}</option>)}</select></label><button type="button" className="text-button" onClick={()=>void refresh()}>Refresh cameras</button></div><p className="small-muted">If camera names are hidden, start once to allow access, stop the camera, then refresh and choose a source.</p><div className={'preview '+(stream?'live':'')}><video ref={video} muted playsInline aria-label="Live camera preview" onLoadedData={ready} onPlaying={ready}/>{!stream&&<div className="preview-placeholder"><span className="preview-frame"><Icon name="camera" size={38}/></span><strong>{camera.starting?'Waiting for camera permission…':'Your camera is off.'}</strong><p>Start when you’re ready. One consenting adult only.</p></div>}{stream&&<span className="preview-label"><span className="dot"/> Live preview · not recording</span>}{stream&&result&&(!box||result.face_count===0)&&<div className="camera-result" role="status"><span>Latest analyzed frame</span><strong>{result.face_count===0?'No face detected':result.faces[0]?.visible_expression_prediction?`Emotion: ${result.faces[0].visible_expression_prediction.label} (uncalibrated prediction)`:'Face detected — identity unverified'}</strong>{result.faces[0]?.input_quality?.status==='BLUR_GATE_BYPASSED'&&<span>Blurry input · prediction may be unreliable</span>}</div>}{box&&stream&&<FaceOverlay result={result}/>}</div><ErrorNote text={error}/><div className="button-row"><button type="button" className="button dark" disabled={!!stream||camera.starting} onClick={()=>void camera.start(device||undefined)}><Icon name="camera"/> Start camera</button><button type="button" className="button quiet" disabled={!stream&&!camera.starting} onClick={()=>camera.stop()}><Icon name="stop"/> Stop camera</button></div></>;
-}
-
-function useCamera(){const [stream,setStream]=useState<MediaStream|null>(null),[error,setError]=useState(''),[devices,setDevices]=useState<MediaDeviceInfo[]>([]),[device,setDevice]=useState(''),[,setStarting]=useState(false);const video=useRef<HTMLVideoElement>(null);const ended=useRef<()=>void>(()=>{});
-  const [camera]=useState(()=>new Camera((value,message,starting)=>{setStream(value);setStarting(!!starting);setError(message??'');if(!value)ended.current();}));
-  useEffect(()=>{const hidden=()=>{if(document.visibilityState==='hidden')camera.stop();};document.addEventListener('visibilitychange',hidden);return()=>{document.removeEventListener('visibilitychange',hidden);camera.stop();};},[camera]);
-  async function refresh(){try{const values=await navigator.mediaDevices.enumerateDevices();setDevices(values.filter(value=>value.kind==='videoinput'));}catch{setError('Camera sources could not be listed. Check browser support.');}}
-  return {camera,stream,error,devices,device,setDevice,video,refresh,ended};
-}
-
-function Photo({file,index,remove}:{file:File;index:number;remove:()=>void}){const url=useBlobURL(file);return <div className="photo"><img src={url||undefined} alt={`Selected reference ${index+1}`}/><span>Reference {index+1}</span><button type="button" className="icon-button" aria-label={`Remove reference ${index+1}`} onClick={remove}><Icon name="close" size={16}/></button></div>;}
-
-function Enrollments({api,onEnd,loginFree}:{api:API;onEnd:()=>void;loginFree:boolean}){
-  const [records,setRecords]=useState<Enrollment[]>([]),[page,setPage]=useState(1),[name,setName]=useState(''),[days,setDays]=useState(30),[photos,setPhotos]=useState<File[]>([]),[consent,setConsent]=useState(false),[retain,setRetain]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[identity,setIdentity]=useState<string|undefined>(),[useCapture,setCapture]=useState(false),[confirm,setConfirm]=useState<{record:Enrollment;action:'revoke'|'delete'}|null>(null);
-  const media=useCamera(),alive=useRef(true),fileInput=useRef<HTMLInputElement>(null),captureEpoch=useRef(0),capturing=useRef(false);const [resetID,setResetID]=useState(0),[capturingUI,setCapturingUI]=useState(false);media.ended.current=()=>{captureEpoch.current++;};
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;api.abort();};},[api]);
-  const load=useCallback(async()=>{try{const value=await api.list(page);if(alive.current)setRecords(value.enrollments);}catch(error){if(alive.current&&!(error instanceof DOMException))setError(error instanceof Error?error.message:'Gallery unavailable.');}},[api,page]);useEffect(()=>{void load();},[load]);
-  function clear(){captureEpoch.current++;media.camera.stop();setPhotos([]);setName('');setIdentity(undefined);setConsent(false);setRetain(false);setResetID(value=>value+1);}
-  function add(files:File[]){if(files.some(file=>!['image/jpeg','image/png'].includes(file.type)||file.size>8*1024*1024)){setError('Choose JPEG/PNG references below 8 MiB each.');return;}if(files.length+photos.length>5){setError('Keep between three and five distinct reference photos.');return;}setPhotos([...photos,...files]);setError('');}
-  async function captureReference(){if(capturing.current)return;capturing.current=true;setCapturingUI(true);try{if(!media.video.current)return;const generation=captureEpoch.current;const blob=await capture(media.video.current);if(!alive.current||generation!==captureEpoch.current||!media.camera.stream)return;add([new File([blob],`reference-${photos.length+1}.jpg`,{type:'image/jpeg'})]);}catch(error){if(alive.current)setError(error instanceof Error?error.message:'Capture failed.');}finally{capturing.current=false;if(alive.current)setCapturingUI(false);}}
-  async function submit(event:React.FormEvent){event.preventDefault();if(!consent||!retain||photos.length<3||photos.length>5)return;setBusy(true);setError('');setMessage('');media.camera.stop();try{await api.enroll(name,photos,days,identity);if(!alive.current)return;clear();setMessage('Encrypted reference saved. No source photos were retained by this interface.');await load();}catch(error){if(alive.current&&!(error instanceof DOMException))setError(error instanceof Error?error.message:'Enrollment failed.');}finally{if(alive.current)setBusy(false);}}
-  const confirmDialog=useModal(!!confirm,()=>{if(!busy)setConfirm(null);});
-  async function manage(){if(!confirm)return;setBusy(true);setError('');try{await api.manage(confirm.record.identity_id,confirm.action);setMessage(confirm.action==='delete'?'Enrollment and scoped reference deleted.':'Consent revoked; the reference is excluded from matching.');setConfirm(null);await load();}catch(error){setError(error instanceof Error?error.message:'The operation failed.');}finally{setBusy(false);}}
-  return <><div className="page-heading"><div><p className="eyebrow">PERMISSION COMES FIRST</p><h1>Consented adult enrollments.</h1><p>Encrypted references, chosen display names, and a clear expiry.</p></div><span className="pill"><Icon name="lock" size={14}/> {loginFree?'Local access':'Operator access'}</span></div><ErrorNote text={error}/>{message&&<div role="status" className="notice success">{message}</div>}
-    <div className="enrollment-layout"><section className="panel"><div className="section-heading"><h2>{identity?'Re-enroll reference':'Create a reference'}</h2><span className="pill">3–5 photos</span></div><p className="small-muted">Clear, distinct, single-person photos. The source photos are processed in memory; only the encrypted reference and consent metadata are retained.</p><form onSubmit={event=>void submit(event)}><div className="form-grid"><label className="field">Chosen display name<input value={name} onChange={event=>setName(event.target.value)} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9 _.:-]{0,63}" required readOnly={!!identity} autoComplete="off" placeholder="A chosen name or pseudonym"/></label><label className="field">Reference expiry<select value={days} onChange={event=>setDays(Number(event.target.value))}>{[1,7,14,30].map(value=><option value={value} key={value}>{value} {value===1?'day':'days'}</option>)}</select></label></div>
-    <div className="segmented"><button type="button" className={!useCapture?'active':''} onClick={()=>{setCapture(false);media.camera.stop();}}>Upload photos</button><button type="button" className={useCapture?'active':''} onClick={()=>setCapture(true)}>Capture manually</button></div>
-    {useCapture?<div className="capture-enrollment"><CameraView {...media}/><button type="button" className="button light" disabled={!media.stream||!consent||photos.length>=5||capturingUI} onClick={()=>void captureReference()}>Capture reference · {photos.length}/5</button></div>:<><input key={resetID} ref={fileInput} type="file" className="file-input" accept="image/jpeg,image/png" multiple aria-label="Select reference photos" onChange={event=>{add(Array.from(event.target.files??[]));event.target.value='';}}/><button type="button" className="upload-zone" onClick={()=>fileInput.current?.click()}><Icon name="upload" size={25}/><strong>Choose reference photos</strong><span>JPEG or PNG · up to 8 MiB each · 3–5 distinct images</span></button></>}
-    {photos.length>0&&<div className="photo-grid">{photos.map((file,index)=><Photo key={index} file={file} index={index} remove={()=>setPhotos(photos.filter((_,i)=>i!==index))}/>)}</div>}
-    <div className="consent-box"><Consent checked={consent} onChange={value=>{setConsent(value);if(!value)media.camera.stop();}}>Every person pictured is an adult who voluntarily agrees to this local research enrollment.</Consent><Consent checked={retain} onChange={setRetain}>They agree to the encrypted reference and chosen-name consent metadata being retained for the selected period, with revocation and deletion available.</Consent></div><div className="button-row"><button className="button dark" disabled={busy||!consent||!retain||photos.length<3||photos.length>5||!name}>{busy?'Processing…':identity?'Replace with fresh consent':'Save encrypted reference'} <Icon name="arrow" size={17}/></button><button type="button" className="button quiet" onClick={clear}>Clear</button></div></form></section>
-    <section className="panel gallery"><div className="section-heading"><h2>Local reference gallery</h2><span className="pill">Page {page}/4</span></div><p className="small-muted">Registration is a reference, not verified identity.</p>{records.length===0?<div className="empty"><Icon name="people" size={28}/><h3>No references on this page.</h3><p>Enroll a consenting adult to start exploring possible matches.</p></div>:records.map(record=><article className="record" key={record.identity_id}><div className="record-top"><span className="avatar">{record.display_name.slice(0,1).toUpperCase()}</span><div><h3>{record.display_name}</h3><span className={'state '+(record.status==='active'?'active':'')}>{record.status.replaceAll('_',' ')}</span></div></div><p>Expires {new Date(record.expires_at).toLocaleDateString()}<br/><span>Encrypted reference · unverified</span></p><div className="record-actions"><button onClick={()=>{clear();setIdentity(record.identity_id);setName(record.display_name);setMessage('Select 3–5 fresh photos and obtain fresh consent.');}}>Re-enroll</button><button disabled={record.status!=='active'} onClick={()=>setConfirm({record,action:'revoke'})}>Revoke</button><button className="danger" onClick={()=>setConfirm({record,action:'delete'})}>Delete</button></div></article>)}<div className="pagination"><button className="button quiet small" disabled={page===1} onClick={()=>setPage(page-1)}>Previous</button><button className="button quiet small" disabled={page===4||records.length<25} onClick={()=>setPage(page+1)}>Next page</button></div></section></div>
-    {confirm&&<div className="modal-backdrop"><section ref={confirmDialog} className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><h2 id="confirm-title">{confirm.action==='delete'?'Delete this enrollment?':'Revoke this consent?'}</h2><p>{confirm.action==='delete'?'This removes the selected metadata and scoped encrypted reference. External originals and backups are unaffected.':'The selected reference will be excluded from matching. Consent metadata remains until deletion or expiry cleanup.'}</p><div className="button-row"><button className="button dark" disabled={busy} onClick={()=>void manage()}>Confirm {confirm.action}</button><button className="button quiet" onClick={()=>setConfirm(null)}>Cancel</button></div></section></div>}
-  </>;
-}
-
-function Research({api,status}:{api:API;status?:UIStatus}){
-  const media=useCamera(),[consent,setConsent]=useState(false),[expression,setExpression]=useState(true),[candidates,setCandidates]=useState(false),[outline,setOutline]=useState(true),[result,setResult]=useState<Analysis|null>(null),[image,setImage]=useState<File|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[automatic,setAutomatic]=useState(false),[ready,setReady]=useState(false),[autoEnabled,setAutoEnabled]=useState(true),[paused,setPaused]=useState(false);
-  const url=useBlobURL(image),fileInput=useRef<HTMLInputElement>(null),alive=useRef(true),epoch=useRef(0),inFlight=useRef(false),controller=useRef<AbortController|null>(null),task=useRef<(signal:AbortSignal)=>Promise<void>>(async()=>{});
-  const [bounded]=useState(()=>new BoundedAnalysis(signal=>task.current(signal),setAutomatic,{intervalMs:0,durationMs:300000,maxFrames:6000}));
-  const stop=useCallback(()=>{epoch.current++;bounded.stop();controller.current?.abort();setResult(null);},[bounded]);
-  media.ended.current=()=>{stop();setReady(false);setPaused(false);};
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;bounded.stop();controller.current?.abort();api.abort();};},[api,bounded]);
-  async function analyze(signal:AbortSignal,liveCamera=false){if(inFlight.current||!consent)return;const generation=epoch.current;inFlight.current=true;setBusy(true);setError('');try{const blob=image??(media.video.current?await capture(media.video.current):null);if(!blob)throw new Error('Start the camera or choose a single-person image.');if(signal.aborted||generation!==epoch.current)return;const value=await api.analyze(blob,{expression,candidates,outline,liveCamera},signal);if(alive.current&&!signal.aborted&&generation===epoch.current){setResult(value);}}catch(error){if(alive.current&&!signal.aborted&&generation===epoch.current){setResult(null);setError(error instanceof Error?error.message:'Analysis failed.');}throw error;}finally{inFlight.current=false;if(alive.current)setBusy(false);}}
-  task.current=signal=>analyze(signal,true);
-  useEffect(()=>{if(!media.stream||!ready||!consent||!autoEnabled||paused||image)return;bounded.start();return()=>bounded.stop();},[media.stream,ready,consent,autoEnabled,paused,image,expression,candidates,outline,bounded]);
-  async function manual(){controller.current=new AbortController();try{await analyze(controller.current.signal);}catch{}}
-  function changeOption(set:(value:boolean)=>void,value:boolean){stop();set(value);}
-  function choose(file:File|null){stop();media.camera.stop();if(file&&(!['image/jpeg','image/png'].includes(file.type)||file.size>8*1024*1024)){setError('Choose a JPEG/PNG below 8 MiB.');return;}setImage(file);setError('');}
-  const box=result?.faces[0]?.face_box;
-  return <><div className="page-heading"><div><p className="eyebrow">LIVE ANALYSIS. ALWAYS VOLUNTARY.</p><h1>Research camera.</h1><p>Explore one consenting adult’s frame. Keep predictions in context.</p></div><span className="pill"><span className="dot"/> No recording</span></div><div className="research-layout"><section className="panel camera-panel"><div className="section-heading"><h2>Your input</h2><span className="pill">One face only</span></div>{image?<><div className="preview image-preview"><img src={url} alt="Voluntarily selected analysis input"/>{box&&<FaceOverlay result={result}/>}</div><button className="button quiet" onClick={()=>choose(null)}>Clear image</button></>:<CameraView {...media} result={result} onReady={()=>setReady(true)}/>}
-      <div className="alternative"><span>or use a voluntarily supplied photo</span><input className="file-input" ref={fileInput} type="file" accept="image/jpeg,image/png" aria-label="Choose analysis image" onChange={event=>{choose(event.target.files?.[0]??null);event.target.value='';}}/><button className="text-button" onClick={()=>fileInput.current?.click()}><Icon name="upload" size={16}/> Choose image</button></div>
-      <div className="consent-box"><Consent checked={autoEnabled} onChange={value=>{changeOption(setAutoEnabled,value);if(value)setPaused(false);}}>Automatically detect and analyze while this camera page is visible.</Consent><Consent checked={consent} onChange={value=>{changeOption(setConsent,value);if(!value)media.camera.stop();}}>The subject is an adult who voluntarily agrees to this local research analysis. No bystanders are pictured.</Consent><Consent checked={expression} onChange={value=>changeOption(setExpression,value)}>Predict a visible-expression category — uncalibrated, not a mood or diagnosis. Blurry frames can be analyzed; identity matching is skipped if blurry.</Consent><Consent checked={candidates} onChange={value=>changeOption(setCandidates,value)}>Show authorized possible identity matches — always unverified.</Consent><Consent checked={outline} onChange={value=>changeOption(setOutline,value)}>Show the detected face outline for this frame.</Consent></div>
-      {expression&&status&&!status.analysis_enabled&&<div className="notice">Visible-expression analysis is disabled in the local service.</div>}{candidates&&status&&!status.candidates_enabled&&<div className="notice">Candidate matching is disabled in the local service.</div>}<ErrorNote text={error}/><div className="button-row">{(image||!autoEnabled)&&<button className="button dark" disabled={busy||automatic||!consent||(!media.stream&&!image)} onClick={()=>void manual()}>{busy?'Analyzing…':'Analyze frame'} <Icon name="arrow" size={17}/></button>}<button className="button quiet" disabled={!!image||automatic||busy||!media.stream||!ready||!consent||!autoEnabled} onClick={()=>{if(paused)setPaused(false);else bounded.start();}}>Resume automatic analysis</button><button className="button quiet" disabled={!automatic&&!busy&&!result} onClick={()=>{setPaused(true);stop();}}><Icon name="stop" size={16}/> Stop analysis</button></div><p className="small-muted">{automatic?'Automatic analysis active.':'Automatic analysis starts when the preview is ready and adult consent is confirmed.'} The next frame starts as soon as inference finishes, up to 20 updates per second and five minutes. Actual speed depends on the GPU. The box and label show the latest analyzed frame. Stop prevents new captures; submitted work may finish local cleanup.</p></section>
-      <section className="results"><div className="panel"><div className="section-heading"><h2>Latest frame</h2><span className="pill">Temporary result</span></div>{!result?<div className="empty"><span className="icon-tile"><Icon name="camera" size={24}/></span><h3>Ready when you are.</h3><p>Camera results appear automatically after you start the camera and confirm adult consent. Uploaded photos use Analyze frame. Nothing is recorded as attendance.</p></div>:result.face_count===0?<div className="empty"><h3>No usable face detected.</h3><p>Identity: Unknown. Keep one full face visible and try another frame.</p></div>:<><div className="result-heading"><span className="dot"/><strong>One face detected</strong><span>Frame only</span></div>{result.faces.map(face=><div key={face.face_index}>{face.input_quality?.status==='BLUR_GATE_BYPASSED'&&<div role="status" className="notice">Blurry frame: this expression prediction may be unreliable. Identity matching was skipped.</div>}<div className="result-section"><p className="eyebrow">IDENTITY POSSIBILITIES</p><h3>Unknown <span className="pill">Unverified</span></h3>{face.identity_diagnostic.possible_candidates.length>0?face.identity_diagnostic.possible_candidates.map(candidate=><div className="candidate" key={candidate.identity_id}><strong>Possible match: {candidate.display_name} <span>(unverified)</span></strong><span>Diagnostic similarity {candidate.cosine_similarity.toFixed(3)}</span></div>):<p>No eligible candidate shown. Identity has not been confirmed.</p>}</div><div className="result-section"><p className="eyebrow">VISIBLE EXPRESSION PREDICTION</p>{face.visible_expression_prediction?<><h3>{face.visible_expression_prediction.label} <span className="pill">Uncalibrated</span></h3><p>Model score {face.visible_expression_prediction.softmax_score.toFixed(3)}. Not a probability of correctness.</p><div className="notice">Visible pattern only — not an emotional state, mood or diagnosis.</div></>:<p>Not requested. No expression classification was performed.</p>}</div></div>)}</>}</div><div className="context-card"><Icon name="shield" size={25}/><h3>A result is not a verdict.</h3><p>Similar-looking references can be ranked for an unenrolled subject. A high expression score does not prove how someone feels.</p><p className="small-muted">Stop or end your session to clear this frame’s result.</p></div></section></div></>;
 }
