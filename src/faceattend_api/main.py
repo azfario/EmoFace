@@ -82,7 +82,7 @@ def create_app(settings=None, model_dependencies=None, *, telemetry=None, enroll
 
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError):
-        return error_response(exc.code)
+        return error_response(exc.code, photo_number=exc.photo_number, quality_reason=exc.quality_reason)
 
     @app.exception_handler(EnrollmentError)
     async def enrollment_error(request: Request, exc: EnrollmentError):

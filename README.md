@@ -6,6 +6,31 @@
 
 This project explores how daily school check-ins could support early awareness of students' emotional wellbeing and encourage timely intervention. Facial-expression predictions are intended as supportive indicators, not as a means of diagnosing depression or determining a student's actual emotional state.
 
+## App Demo
+
+Enroll reference photos, then scan a live camera feed for a possible name match and facial-expression prediction.
+
+| Reference photos | Enrollment saved |
+|---|---|
+| <img src="assets/demo/enrollment-photos.png" alt="Enrollment form with five reference photos ready to save" width="400"> | <img src="assets/demo/enrollment-saved.png" alt="Successful enrollment with saved names and a confirmation message" width="400"> |
+
+**Live scan — happy prediction**
+
+![Live camera feed showing a possible name match and a happy expression prediction](assets/demo/scan-happy.png)
+
+<details>
+<summary>More live scan examples</summary>
+
+| Neutral prediction | Surprise prediction |
+|---|---|
+| <img src="assets/demo/scan-neutral.png" alt="Live camera feed with a possible name match and a neutral expression prediction" width="400"> | <img src="assets/demo/scan-surprise.png" alt="Live camera feed with a possible name match and a surprise expression prediction" width="400"> |
+
+| Angry prediction | Disgust prediction |
+|---|---|
+| <img src="assets/demo/scan-angry.png" alt="Live camera feed with a possible name match and an angry expression prediction" width="400"> | <img src="assets/demo/scan-disgust.png" alt="Live camera feed with a possible name match and a disgust expression prediction" width="400"> |
+
+</details>
+
 ## Quick start (Windows + Docker)
 
 Run the app with Docker; Python, Node.js and PostgreSQL are supplied inside the containers.
@@ -32,7 +57,7 @@ Open Docker Desktop and wait for its engine to be running, then run:
 
 The launcher verifies the bundled model hashes, prepares missing runtime copies, builds the containers, checks CUDA model inference, creates or reuses protected secrets, sets up PostgreSQL and waits for healthy services. First use downloads dependencies and builds large CUDA images; allow sufficient disk space and time. It opens [http://127.0.0.1:18080/app/](http://127.0.0.1:18080/app/) when ready. **No login or password prompt is required.**
 
-Choose your camera, click **Start camera**, and confirm adult consent to enable analysis. Saved enrollments are available to anyone who can access the app on this PC.
+The app opens on **Scan**. Choose a camera and click **Start** to show a possible name match and emotion prediction directly on the live feed; **Stop** releases the camera. In **Enroll**, enter a name, capture or upload 3–5 photos, and click **Save**. Start and Save confirm the permissions described beside those buttons; no consent checkboxes are required. Saved enrollments are available to anyone who can access the app on this PC.
 
 To stop while keeping your data and secrets:
 
@@ -111,11 +136,12 @@ Key data flows:
 
 Runtime behavior:
 
-- Camera analysis starts after the operator starts the preview and confirms adult consent. A face box carries `Emotion: <category>` and an uncalibrated-prediction note.
+- The interface has two tabs, **Scan** and **Enroll**, and opens on Scan without activating the camera. Start authorizes the local adult scan. The live face box shows `Possible: <name>` (or `Name: Unknown`) and `Emotion: <category>`.
 - Each browser analysis loop waits for its current request before starting the next, with at most 20 starts per second and five-minute analysis sessions. The backend serializes model access. Actual speed depends on capture, encoding and inference; camera FPS has not been benchmarked.
-- Expression prediction, candidate matching and face outlines have separate controls. Blurry-frame expression analysis warns of uncertainty and skips identity matching; enrollment retains its original quality gates.
+- Start combines expression prediction, candidate matching and face outlines. Enrollment and live name matching use the shared `demo-everyday-v1` profile: image side ≥128px, face side ≥48px, blur variance ≥20, brightness 20–240, eye spacing ≥8% of face width, and up to 10% box overflow/landmark padding with landmarks inside the image. Accepted boxes are clamped before cropping and drawing. Frames below the demo blur limit can still produce expressions but skip identity matching. Standalone verification/calibration retains its strict profile. Names remain possible matches and expressions remain predictions.
+- Every submitted reference must pass; duplicate images, inconsistent references and multiple faces are rejected. A quality refusal identifies the photo number and reason, keeps the selected photos, and highlights the thumbnail to replace. Earlier policy fingerprints require explicit re-enrollment before matching; existing records and encrypted references are retained.
 - The app opens without a login. All local users can manage saved enrollments; temporary browser sessions still enforce CSRF protection and request limits.
-- Stop camera, Clear workspace, consent withdrawal and hidden tabs stop capture. Images and prediction results remain transient; the application records no video or individual expression history.
+- Stop, tab switching, hidden tabs, session expiry and camera revocation release capture and clear scan results. Empty frames and frame-level face-quality, multiple-face, black-frame or crop rejections clear predictions and keep the live camera scanning; labels resume when a usable face returns. Scans stop after five minutes or a service/capture failure. Images and prediction results remain transient; the application records no video or individual expression history.
 
 ## Model development and results
 
@@ -264,7 +290,7 @@ $env:FACEATTEND_DB_TELEMETRY_ENABLED = 'false'
 .\.venv\Scripts\python.exe scripts\phase3_serve.py
 ```
 
-Open `http://127.0.0.1:8000/app/`, select a camera and confirm adult consent. Login is disabled by default when enrollment is enabled. Optional password mode uses `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` and the configured operator record. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
+Open `http://127.0.0.1:8000/app/`, select a camera on Scan and click Start. Login is disabled by default when enrollment is enabled. Optional password mode uses `FACEATTEND_OPERATOR_LOGIN_REQUIRED=true` and the configured operator record. Local API exploration is available at `/docs`; its bundled Swagger assets remain part of the application. No camera is opened by installation or tests.
 
 Run source-checkout checks:
 
@@ -347,7 +373,7 @@ docker compose up -d --wait --wait-timeout 180
 
 The GPU check runs the mounted saved models on synthetic tensors and requires exclusive CUDA computation. Stop if it fails; do not substitute a CPU service. One-shot migrations use the owner credential; the API receives only the restricted runtime database password, operator record and encryption key. Keep all five generated secret files outside the checkout and OneDrive, under their protected ACL. No default production password is supplied. `--qa` creates a separately scoped fictional test fixture only; it is not an operator setup shortcut.
 
-Open `http://127.0.0.1:18080/app/`; no login is required. Start the camera yourself and confirm adult consent; the existing automatic expression/outline workflow then operates as before. The container tests do not request camera permission. Enrollment requires 3–5 distinct acceptable images and encrypted-reference consent. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
+Open `http://127.0.0.1:18080/app/`; no login is required. Scan uses Start and Stop, with possible names and emotion predictions over the live feed. Enroll uses manual capture or uploads, a name, and Save. Start confirms adult participation; Save authorizes encrypted-reference storage for the existing 30-day default. The container tests do not request camera permission. Enrollment still requires 3–5 distinct acceptable images. Candidate names remain possible matches, and expressions remain uncalibrated predictions.
 
 To stop, preserve data and restart later:
 

@@ -40,7 +40,7 @@ def test_blur_override_does_not_allow_black_or_overexposed_frames(ui,brightness,
     response=analyze(ui,flat(brightness))
     assert response.status_code==status and 'visible_expression_prediction' not in response.text
 
-@pytest.mark.parametrize('mode',['multiple','clipped'])
+@pytest.mark.parametrize('mode',['multiple','over_clipped'])
 def test_blur_override_does_not_allow_bystanders_or_invalid_geometry(ui,mode):
     ui.headers['x-faceattend-blur-opt-in']='1';ui.context.bundle.detector.mode=mode
     assert analyze(ui).status_code==422

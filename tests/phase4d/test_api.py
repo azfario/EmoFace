@@ -48,7 +48,7 @@ def test_no_names_vectors_labels_in_logs_or_persistence(operator,caplog):
     assert response.headers['cache-control']=='no-store'
     assert '/api/v1/demo/analyze-face' not in operator.app.openapi()['paths']
 
-@pytest.mark.parametrize('mode',['multiple','clipped','exception'])
+@pytest.mark.parametrize('mode',['multiple','over_clipped','exception'])
 def test_invalid_face_no_expression_names(operator,mode):
     operator.context.bundle.detector.mode=mode
     response=query(operator,params={'include_candidates':'true'})

@@ -3,6 +3,7 @@ import anyio
 from fastapi import APIRouter,Request
 from starlette.responses import JSONResponse
 from faceattend_api.errors import APIError
+from face_verification.demo_quality import demo_face_bundle
 from faceattend_api.services.image_input import read_parts,decode
 from .auth import COOKIE
 from .errors import EnrollmentError
@@ -67,7 +68,7 @@ async def status(request:Request,identity_id:str):
 @router.post('/enrollments/{identity_id}/inspect-reference')
 async def inspect_reference(request:Request,identity_id:str):
     service=authorization(request,True).require_service()
-    bundle=request.app.state.models.face()
+    bundle=demo_face_bundle(request.app.state.models.face())
     return await anyio.to_thread.run_sync(service.inspect,valid_id(identity_id),bundle.model_id)
 
 async def native_worker(work,timeout=60):
@@ -103,7 +104,7 @@ async def enrollment_upload(request,identity_id=None):
         except ValueError: raise EnrollmentError('ENROLLMENT_INVALID_REQUEST') from None
         def work():
             try:
-                bundle=models.face()
+                bundle=demo_face_bundle(models.face())
                 images=[decode(part,settings) for part in parts if part.is_file]
                 return service.enroll(name,images,bundle,adult_consent=True,research_opt_in=True,
                     enrollment_consent=True,retention_days=days,identity_id=identity_id)

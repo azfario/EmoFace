@@ -30,13 +30,14 @@ export class BoundedAnalysis {
   private generation=0;
   private controller:AbortController|null=null;
   active=false;
-  constructor(private task:(signal:AbortSignal)=>Promise<void>,private changed:(active:boolean)=>void=()=>{},private limits:AnalysisLimits={intervalMs:10000,durationMs:45000,maxFrames:5}){
+  constructor(private task:(signal:AbortSignal)=>Promise<void>,private changed:(active:boolean)=>void=()=>{},private limits:AnalysisLimits={intervalMs:10000,durationMs:45000,maxFrames:5},private finished:(reason:'limit'|'error')=>void=()=>{}){
     if((limits.intervalMs!==0&&limits.intervalMs<5000)||limits.durationMs<=0||limits.durationMs>300000||limits.maxFrames<1||limits.maxFrames>(limits.intervalMs===0?6000:60))throw new Error('Invalid analysis sampling limits.');
   }
-  start(){this.stop();const generation=this.generation;let count=0;this.active=true;this.changed(true);this.end=setTimeout(()=>this.stop(),this.limits.durationMs);
-    const tick=async()=>{if(!this.active||generation!==this.generation)return;const started=performance.now();this.controller=new AbortController();try{await this.task(this.controller.signal);}catch{if(generation===this.generation)this.stop();return;}
-      if(generation!==this.generation||!this.active)return;count++;if(count>=this.limits.maxFrames){this.stop();return;}
+  start(){this.stop();const generation=this.generation;let count=0;this.active=true;this.changed(true);this.end=setTimeout(()=>this.finish('limit'),this.limits.durationMs);
+    const tick=async()=>{if(!this.active||generation!==this.generation)return;const started=performance.now();this.controller=new AbortController();try{await this.task(this.controller.signal);}catch{if(generation===this.generation)this.finish('error');return;}
+      if(generation!==this.generation||!this.active)return;count++;if(count>=this.limits.maxFrames){this.finish('limit');return;}
       // Live mode has no post-inference pause; only cap fast responses at 20 fps.
       this.timeout=setTimeout(tick,this.limits.intervalMs===0?Math.max(0,50-(performance.now()-started)):this.limits.intervalMs);};void tick();}
   stop(){this.generation++;this.active=false;if(this.timeout)clearTimeout(this.timeout);if(this.end)clearTimeout(this.end);this.controller?.abort();this.controller=null;this.changed(false);}
+  private finish(reason:'limit'|'error'){this.stop();this.finished(reason);}
 }

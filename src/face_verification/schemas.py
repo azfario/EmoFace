@@ -3,6 +3,8 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
 
+QUALITY_REASONS = frozenset({'resolution', 'face_size', 'clipping', 'landmarks', 'pose', 'blur', 'lighting'})
+
 class Status(StrEnum):
     OK = 'OK'
     VERIFIED = 'VERIFIED'
@@ -28,9 +30,11 @@ class Status(StrEnum):
     THRESHOLD_NOT_CALIBRATED = 'THRESHOLD_NOT_CALIBRATED'
 
 class VerificationError(RuntimeError):
-    def __init__(self, status: Status, message: str):
+    def __init__(self, status: Status, message: str, *, quality_reason=None, photo_number=None):
         super().__init__(message)
         self.status = status
+        self.quality_reason = quality_reason if quality_reason in QUALITY_REASONS else None
+        self.photo_number = photo_number
 
 @dataclass
 class Result:
@@ -51,6 +55,8 @@ class VerificationResult(Result):
 class EnrollmentResult(Result):
     user_id: str = ''
     sample_count: int = 0
+    photo_number: int | None = None
+    quality_reason: str | None = None
 
 @dataclass
 class DeletionResult(Result):
@@ -64,5 +70,6 @@ class FaceResult(Result):
     landmarks: Any = field(default=None, repr=False)
     aligned: Any = field(default=None, repr=False)
     quality: dict = field(default_factory=dict)
+    quality_reason: str | None = None
     def to_dict(self):
         return {'status': self.status.value, 'message': self.message, 'quality': self.quality}

@@ -6,6 +6,7 @@ import anyio
 from fastapi import APIRouter,Request
 from starlette.staticfiles import StaticFiles
 from face_verification.detector import detect_single_face
+from face_verification.demo_quality import demo_face_bundle
 from face_verification.schemas import Status
 from faceattend_api.errors import APIError,core_error
 from faceattend_api.services.image_input import read_parts,decode
@@ -93,7 +94,7 @@ async def preview_face(request:Request,include_candidates:bool=False,include_fac
         part=next(p for p in parts if p.is_file)
         def work():
             try:
-                bundle=models.face();image=decode(part,request.app.state.settings);face=detect_single_face(image,bundle)
+                bundle=demo_face_bundle(models.face());image=decode(part,request.app.state.settings);face=detect_single_face(image,bundle)
                 faces=[]
                 if face.status!=Status.NO_FACE:
                     if face.status!=Status.OK:raise core_error(face.status)

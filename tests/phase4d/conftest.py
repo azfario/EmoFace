@@ -11,6 +11,7 @@ from faceattend_analysis.config import AnalysisSettings
 from faceattend_analysis.crop import CROP_VERSION
 from faceattend_analysis.service import FaceAnalysis
 from faceattend_analysis.expression import WARNING
+from face_verification.demo_quality import demo_face_bundle
 from tests.phase4c.conftest import context,images,gallery,private_root,MemoryCatalog,add_reference,upload,CONSENT
 from tests.phase4b.conftest import PASSWORD
 
@@ -38,6 +39,7 @@ def analyzer():return FaceAnalysis(FakeCrop())
 
 @pytest.fixture
 def operator(context,gallery,monkeypatch):
+    gallery.demo_model_id=demo_face_bundle(context.bundle).model_id
     import faceattend_analysis.router as router
     import faceattend_candidates.service as candidates
     fake=FakeCrop();monkeypatch.setattr(router,'CropExpression',lambda existing:fake)

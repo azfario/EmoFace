@@ -10,6 +10,7 @@ from faceattend_analysis.config import AnalysisSettings
 from tests.phase4d.conftest import FakeCrop
 from tests.phase4c.conftest import context,images,gallery,private_root,MemoryCatalog,add_reference,upload,CONSENT
 from tests.phase4b.conftest import PASSWORD
+from face_verification.demo_quality import demo_face_bundle
 
 @pytest.fixture(autouse=True)
 def ui_env(monkeypatch):
@@ -17,6 +18,7 @@ def ui_env(monkeypatch):
 
 @pytest.fixture
 def ui(context,gallery,monkeypatch):
+    gallery.demo_model_id=demo_face_bundle(context.bundle).model_id
     import faceattend_candidates.service as candidates
     import faceattend_analysis.router as analysis
     monkeypatch.setattr(candidates,'Catalog',MemoryCatalog);monkeypatch.setattr(analysis,'CropExpression',lambda existing:FakeCrop())

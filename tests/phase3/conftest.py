@@ -36,6 +36,10 @@ class Detector:
         points = np.array([[[70,75],[130,75],[100,100],[75,135],[125,135]]] * count, dtype=np.float32)
         if self.mode == 'clipped':
             boxes[0,0] = -3
+        if self.mode == 'over_clipped':
+            boxes[0,0] = -40
+        if self.mode == 'padded_landmark':
+            points[0,0,0] = 20
         return boxes, points
 
 class Recognizer:
